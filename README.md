@@ -158,3 +158,5 @@ It takes time for your tiers to fill out enough to where the matchmaking can sat
 Use the snapshot task in your plugin tasks menu. It will create a json file in your Ascension plugin folder with a date. When running the import, it will look for the most recently created snapshot and import automatically.
 
 ### How can I check the system is working correctly?
+
+The browser console menu features an extremely robust logging system for debug. Users can use this to further gauge if matchmaking is working as intended.
