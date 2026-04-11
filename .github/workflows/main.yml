@@ -40,7 +40,7 @@ jobs:
       - name: Build Ascension.zip
         run: |
           cd plugins
-          zip -r DiceR.zip DiceR
+          zip -r Ascension.zip Ascension
 
       # ---------------------------------
       # Calculate SHA256 of committed zip
