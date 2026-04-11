@@ -34,7 +34,7 @@ tasks:
       task: reset
 
   - name: "Snapshot"
-    description: Writes all performer ratings, match history, and ledger to a json file. Example: DATE-TIME - Ascension Database Snapshot.json
+    description: "Writes all performer ratings, match history, and ledger to a json file. Example: DATE-TIME - Ascension Database Snapshot.json"
     defaultArgs:
       mode: processAll
       task: snapshotexport
