@@ -137,22 +137,24 @@ However, there are accelerators that can help your performers climb. For example
 
 Another option is to use the other modes. Placement mode and Champion mode with performers at least in C in D tier can help accelerate getting performers out of F tier. In Head to Head mode with the underdog bonus, performers can see points as high as 2.8.
 
-### S-Tier is hard to climb
+### Why S-Tier is hard to climb?
 
 This is by design. S-Tiers are meant to be S-Tiers and their matches are meant to reflect that. They cannot battle anyone below B tier and face a significant point reduction at their level. If an S tier is in fact an S-Tier this really shouldn't be an issue.
 
-### All I see is unrated performers
+### Why do I see unrated performers so much?
 
 Keep in mind when your database starts from 0 unrated performers take overwhelming priority to give everyone a fair baseline and match count. Over time once your habits of play and scheduling kick in and you've got a baseline. Things will start shaking up.
 
-### Im not seeing performers that graduated ranks
+### Why am I not seeing performers that graduated ranks?
 
 If your performers have just graduated they probably have a low weight. It is important to remember higher weights will always trump lower weights as you play. Over time, their weights recharge towards 1.0. 
 
-### Im not seeing enough of X tier
+### Why am I not seeing enough of X tier?
 
 It takes time for your tiers to fill out enough to where the matchmaking can satisfy the requirement, you also have to consider whether weight is counting against the performers well. The database will scale over time with your input. You will see more and more cross tier matches, more and more different tier matches, and more and more competitive matches.
 
-### How to I backup and restore my database
+### How to I backup and restore my database?
 
 Use the snapshot task in your plugin tasks menu. It will create a json file in your Ascension plugin folder with a date. When running the import, it will look for the most recently created snapshot and import automatically.
+
+### How can I check the system is working correctly?
