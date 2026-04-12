@@ -984,9 +984,22 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--hon-card-bg, #fff);
+  background: var(--hon-card-bg, #1a1a1a) !important;
   box-shadow: var(--hon-card-shadow, 0 2px 8px rgba(0,0,0,0.06));
 }
+
+.hon-performer-title.hon-scene-title {
+    color: #ffffff;
+}
+
+.hon-performer-meta.hon-scene-meta .hon-meta-item {
+    color: #ffffff; /* default text (the values) white */
+}
+
+.hon-performer-meta.hon-scene-meta .hon-meta-item strong {
+    color: #999999; /* the labels in grey */
+}
+
 .hon-performer-duration {
   position: absolute;
   right: 8px;
@@ -2998,32 +3011,6 @@
 === Swipe visual indicators ===
 ===============================
 */
-  .hon-swipe-hint {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.2);
-    padding: 10px;
-    border-radius: 50%;
-    font-size: 24px;
-    z-index: 40;
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-  }
-  
-  .hon-swipe-hint.left {
-    left: 10px;
-  }
-  
-  .hon-swipe-hint.right {
-    right: 10px;
-  }
-  
-  .hon-swipe-hint.visible {
-    opacity: 1;
-  }
-
 
 
 .hon-choose-btn.chosen-btn {
@@ -3127,11 +3114,19 @@
 	  position: absolute;
 	  top: 50%;
 	  transform: translateY(-50%);
+	  background: rgba(255, 255, 255, 0.2);
+	  padding: 10px;
+	  border-radius: 50%;
 	  font-size: 24px;
+	  z-index: 40;
 	  opacity: 0;
-	  transition: opacity 0.3s ease;
-	  z-index: 10;
+	  transition: opacity 0.2s;
 	  pointer-events: none;
+	  width: 44px;
+	  height: 44px;
+	  display: flex;
+	  align-items: center;
+	  justify-content: center;
 	}
 
 	.hon-swipe-hint.left {
@@ -3143,11 +3138,9 @@
 	}
 
 	.hon-swipe-hint.visible {
-	  opacity: 0.7;
-	 }
-  .hon-keyboard-hints {
-    display: none !important;
-  }
+	  opacity: 1;
+	}
+
 }
 
 /*
