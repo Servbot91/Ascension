@@ -3011,32 +3011,6 @@
 === Swipe visual indicators ===
 ===============================
 */
-  .hon-swipe-hint {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.2);
-    padding: 10px;
-    border-radius: 50%;
-    font-size: 24px;
-    z-index: 40;
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-  }
-  
-  .hon-swipe-hint.left {
-    left: 10px;
-  }
-  
-  .hon-swipe-hint.right {
-    right: 10px;
-  }
-  
-  .hon-swipe-hint.visible {
-    opacity: 1;
-  }
-
 
 
 .hon-choose-btn.chosen-btn {
@@ -3140,11 +3114,19 @@
 	  position: absolute;
 	  top: 50%;
 	  transform: translateY(-50%);
+	  background: rgba(255, 255, 255, 0.2);
+	  padding: 10px;
+	  border-radius: 50%;
 	  font-size: 24px;
+	  z-index: 40;
 	  opacity: 0;
-	  transition: opacity 0.3s ease;
-	  z-index: 10;
+	  transition: opacity 0.2s;
 	  pointer-events: none;
+	  width: 44px;
+	  height: 44px;
+	  display: flex;
+	  align-items: center;
+	  justify-content: center;
 	}
 
 	.hon-swipe-hint.left {
@@ -3156,11 +3138,9 @@
 	}
 
 	.hon-swipe-hint.visible {
-	  opacity: 0.7;
-	 }
-  .hon-keyboard-hints {
-    display: none !important;
-  }
+	  opacity: 1;
+	}
+
 }
 
 /*
