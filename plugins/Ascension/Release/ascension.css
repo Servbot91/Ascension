@@ -984,9 +984,22 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--hon-card-bg, #fff);
+  background: var(--hon-card-bg, #1a1a1a) !important;
   box-shadow: var(--hon-card-shadow, 0 2px 8px rgba(0,0,0,0.06));
 }
+
+.hon-performer-title.hon-scene-title {
+    color: #ffffff;
+}
+
+.hon-performer-meta.hon-scene-meta .hon-meta-item {
+    color: #ffffff; /* default text (the values) white */
+}
+
+.hon-performer-meta.hon-scene-meta .hon-meta-item strong {
+    color: #999999; /* the labels in grey */
+}
+
 .hon-performer-duration {
   position: absolute;
   right: 8px;
