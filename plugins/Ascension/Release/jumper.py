@@ -29,6 +29,8 @@ def main():
         
         conn = input_data.get("server_connection", {})
         host = conn.get('Host', 'localhost')
+        if host == "0.0.0.0":
+            host = "127.0.0.1"
         STASH_URL = f"{conn.get('Scheme')}://{host}:{conn.get('Port')}/graphql"
         
         session = conn.get("SessionCookie", {})
