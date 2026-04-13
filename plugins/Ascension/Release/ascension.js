@@ -1013,6 +1013,14 @@
       loserLoss = Math.ceil(loserLoss * scaleFactor);
       loserLoss = Math.min(loserLoss, 5);
     }
+    if (loserRating < winnerRating - 15) {
+      const gap = winnerRating - loserRating;
+      const mitigationFactor = Math.max(0.2, 1 - gap / 45);
+      loserLoss = Math.ceil(loserLoss * mitigationFactor);
+      if (gap > 25) {
+        loserLoss = Math.min(loserLoss, 3);
+      }
+    }
     return {
       winnerGain: Math.max(1, winnerGain),
       loserLoss: Math.max(0, loserLoss)
