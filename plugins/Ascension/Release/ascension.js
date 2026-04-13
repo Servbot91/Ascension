@@ -1007,9 +1007,15 @@
       winnerGain = Math.ceil(winnerGain * 0.8);
     }
     if (winnerRating < loserRating - 20) {
+      const ratingDiff2 = loserRating - winnerRating;
+      const scaleFactor = Math.max(0.3, 1 - (ratingDiff2 - 20) / 100);
+      winnerGain = Math.ceil(winnerGain * scaleFactor);
       loserLoss = Math.min(loserLoss, 3);
     } else if (winnerRating - loserRating > 20) {
-      loserLoss = Math.min(loserLoss, 1);
+      const ratingDiff2 = winnerRating - loserRating;
+      const scaleFactor = Math.max(0.3, 1 - (ratingDiff2 - 20) / 100);
+      winnerGain = Math.ceil(winnerGain * scaleFactor);
+      loserLoss = Math.min(loserLoss, Math.max(1, Math.floor(loserLoss * scaleFactor)));
     }
     return {
       winnerGain: Math.max(1, winnerGain),
