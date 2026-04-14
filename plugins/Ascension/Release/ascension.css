@@ -2950,7 +2950,6 @@
     position: absolute;
     width: 100%;
     max-width: 90vw; 
-    height: 105vh;
     transition: transform 0.3s ease, opacity 0.3s ease, z-index 0.3s step-end;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     z-index: 10;
