@@ -1,6 +1,10 @@
+# Overview
+
 Ascension is a fork of the plugin known as hot or not. At its core it is a comparator with comprehensive matchmaking logic to accurately and granularly rate stash entities on a rating scale of .1 to 100. The plugin aims to solve the problems of inherited personal bias and overestimation forcing the user to make weighted decisions while maintaining engagement and keeping the process from becoming monotonous while also protecting database integrity and maintaining healthy vertical scaling.
 
-Ascension is able to achieve these goals through a variety of systems. Most of these systems feature variables that become unique to the player over time adapting to play schedule and frequency of play.
+Ascension is able to achieve these goals through a variety of systems. Most of these systems feature variables that become unique to the player over time adapting to play schedule, frequency of play, rating and tier distribution.
+
+---
 
 # Tier System
 
@@ -78,6 +82,8 @@ The match selection features a 10% chance of a Cross tier matchup with the selec
 
 The system will always maintain checks to satisfy the 2 minimum performer requirement. However  criteria fails to be met, the system will drop the smart selection and search the nearest opponent. This is to maintain match continuity in the event of failover. If it cannot find the next closest opponent, it will randomly select. 
 
+---
+
 # Scoring
 
 The system now provides dynamic scoring according to point gap and Dynamic K-Factor. Protections have also been implemented for underdog and high tier loses which is considered in the point gap and scoring. 
@@ -145,6 +151,8 @@ $$Result = (K \text{ Factor}) \times (\text{Elo Probability}) \times (\text{Unde
 | **Gauntlet** | Streak $\ge 3$        | **Variable (0.9x down to 0.3x)** | Wins become 15% less effective for every win past the 3rd.           |
 | **Champion** | Streak $5–9$          | **0.7x**                         | Significant reduction in gains to keep the "King" within reach.      |
 | **Champion** | Streak $\ge 10$       | **0.4x**                         | **Hard Cap**: Extreme dampening to stop runaway leaderboard leaders. |
+
+---
 
 # Summary
 
