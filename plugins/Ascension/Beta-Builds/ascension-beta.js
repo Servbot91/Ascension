@@ -4088,7 +4088,6 @@ Match Stats:`;
       formattedMessage: readableMessage
     };
     eventLogEntries.push(entry);
-    eventLogEntries.push(entry);
     if (eventLogEntries.length > MAX_LOG_ENTRIES) {
       eventLogEntries.splice(0, eventLogEntries.length - MAX_LOG_ENTRIES);
     }
