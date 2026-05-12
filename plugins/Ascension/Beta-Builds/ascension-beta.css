@@ -3093,6 +3093,20 @@
   border-radius: 12px;
 }
 
+#hon-performer-selection,
+#hon-comparison-area,
+.hon-actions {
+  transition: opacity 0.3s ease-in-out;
+  opacity: 1;
+}
+
+#hon-performer-selection.hiding,
+#hon-comparison-area.hiding,
+.hon-actions.hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .hon-selection-title {
   font-size: 1.3rem;
   font-weight: bold;
