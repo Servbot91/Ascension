@@ -2769,7 +2769,7 @@
 }
 
 .hon-modal-content {
-  position: absolute; 
+  position: relative; 
   width: 1250px;
   max-width: 95%;   
   max-height: 95vh;
@@ -3091,20 +3091,6 @@
   background: #1a1a1a;
   border: 2px solid #333;
   border-radius: 12px;
-}
-
-#hon-performer-selection,
-#hon-comparison-area,
-.hon-actions {
-  transition: opacity 0.3s ease-in-out;
-  opacity: 1;
-}
-
-#hon-performer-selection.hiding,
-#hon-comparison-area.hiding,
-.hon-actions.hiding {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .hon-selection-title {

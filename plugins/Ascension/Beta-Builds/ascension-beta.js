@@ -17,7 +17,7 @@
     state.gauntletFalling = false;
     state.gauntletFallingItem = null;
     state.gauntletChampionRank = 0;
-    state.matchHistory.clear();
+    state.matchHistory = [];
     state.skippedId = null;
   }
   var state;
@@ -47,29 +47,14 @@
         pluginConfigCache: null,
         selectedGenders: ["FEMALE"],
         // Enhanced tracking
-        matchHistory: /* @__PURE__ */ new Map(),
+        matchHistory: [],
         skippedIds: [],
-        seenPairs: {
-          set: /* @__PURE__ */ new Set(),
-          maxSize: 1e4,
-          add(pair) {
-            if (this.set.size >= this.maxSize) {
-              const items = Array.from(this.set).slice(Math.floor(this.maxSize / 2));
-              this.set = new Set(items);
-            }
-            this.set.add(pair);
-          },
-          has(pair) {
-            return this.set.has(pair);
-          },
-          size() {
-            return this.set.size;
-          },
-          clear() {
-            this.set.clear();
-          }
-        },
+        // Track multiple skipped IDs
+        seenPairs: /* @__PURE__ */ new Set(),
+        // Track seen performer pairs to prevent repetition
+        // Skip tracking
         skippedId: null
+        // Keep for backward compatibility but deprecate
       };
     }
   });
@@ -720,8 +705,15 @@
   });
 
   // dom-utils.js
+  function clearDOMCache() {
+    elementCollectionCache.clear();
+    commonElementsCache.clear();
+  }
+  var elementCollectionCache, commonElementsCache;
   var init_dom_utils = __esm({
     "dom-utils.js"() {
+      elementCollectionCache = /* @__PURE__ */ new Map();
+      commonElementsCache = /* @__PURE__ */ new Map();
     }
   });
 
@@ -840,9 +832,6 @@
     if (performer.custom_fields.hotornot_stats) {
       try {
         const stats = JSON.parse(performer.custom_fields.hotornot_stats);
-        if (stats.performer_record) {
-          delete stats.performer_record;
-        }
         return { ...defaultStats, ...stats };
       } catch (e) {
         console.warn(`[HotOrNot] Failed to parse stats for ${performer.id}`);
@@ -1374,9 +1363,7 @@
         const currentStats = parsePerformerEloData(performerObj);
         const updatedStats = updatePerformerStats(currentStats, won);
         if (updatedStats) {
-          const statsToStore = { ...updatedStats };
-          delete statsToStore.performer_record;
-          variables.fields.hotornot_stats = JSON.stringify(statsToStore);
+          variables.fields.hotornot_stats = JSON.stringify(updatedStats);
         }
       } catch (e) {
         console.error(`[Ascension] Stats update failed for ${id}:`, e);
@@ -1477,9 +1464,7 @@
     if (state.battleType === "performers") {
       const fields = {};
       if (statsObj) {
-        const statsToRestore = { ...statsObj };
-        delete statsToRestore.performer_record;
-        fields.hotornot_stats = JSON.stringify(statsToRestore);
+        fields.hotornot_stats = JSON.stringify(statsObj);
         if ("performer_record" in statsObj) {
           const recordData = statsObj.performer_record;
           console.log(`[Ascension] Restoring performer_record for ${itemId}:`, recordData);
@@ -1554,16 +1539,13 @@
     let startY = 0;
     let startTime = 0;
     let isDragging = false;
-    let carouselCards = cards;
     const leftHint = document.createElement("div");
     leftHint.className = "hon-swipe-hint left";
     leftHint.innerHTML = "\u27A1\uFE0F";
-    leftHint.style.opacity = "0.3";
     container.appendChild(leftHint);
     const rightHint = document.createElement("div");
     rightHint.className = "hon-swipe-hint right";
     rightHint.innerHTML = "\u2B05\uFE0F";
-    rightHint.style.opacity = "0.3";
     container.appendChild(rightHint);
     container.style.touchAction = "pan-y";
     function updateCardPositions() {
@@ -1571,41 +1553,25 @@
         card.classList.remove("active", "inactive");
         if (index === currentIndex) {
           card.classList.add("active");
-          card.style.transform = "translateX(0)";
-          card.style.opacity = "1";
         } else {
           card.classList.add("inactive");
-          card.style.transform = index < currentIndex ? "translateX(-100%)" : "translateX(100%)";
         }
       });
     }
-    function updateCards(newCards) {
-      if (newCards && newCards.length >= 2) {
-        carouselCards = newCards;
-        currentIndex = 0;
-        updateCardPositions();
-      }
-    }
     function showHint(direction) {
       const hint = direction === "left" ? leftHint : rightHint;
-      hint.style.opacity = "0.8";
-      hint.style.transform = "scale(1.2)";
+      hint.classList.add("visible");
       setTimeout(() => {
-        hint.style.opacity = "0.3";
-        hint.style.transform = "scale(1)";
-      }, 150);
+        hint.classList.remove("visible");
+      }, 300);
     }
     function nextCard() {
-      if (cards.length <= 1)
-        return false;
       currentIndex = (currentIndex + 1) % cards.length;
       updateCardPositions();
       showHint("right");
       return true;
     }
     function prevCard() {
-      if (cards.length <= 1)
-        return false;
       currentIndex = (currentIndex - 1 + cards.length) % cards.length;
       updateCardPositions();
       showHint("left");
@@ -1614,33 +1580,31 @@
     function getCurrentCard() {
       return cards[currentIndex];
     }
+    updateCardPositions();
     function handleTouchStart(e) {
-      if (e.touches.length > 1)
-        return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      startTime = Date.now();
+      startTime = (/* @__PURE__ */ new Date()).getTime();
       isDragging = true;
       const currentCard = getCurrentCard();
       if (currentCard) {
         currentCard.classList.add("swiping");
-        currentCard.style.willChange = "transform, opacity";
       }
     }
     function handleTouchMove(e) {
-      if (!isDragging || e.touches.length > 1)
+      if (!isDragging)
         return;
       const x = e.touches[0].clientX;
       const y = e.touches[0].clientY;
       const dx = x - startX;
       const dy = y - startY;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 5) {
+      if (Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
         e.stopPropagation();
         const currentCard = getCurrentCard();
         if (currentCard) {
-          currentCard.style.transform = `translate3d(${dx}px, 0, 0)`;
-          currentCard.style.opacity = Math.max(0.7, 1 - Math.abs(dx) / window.innerWidth);
+          currentCard.style.transform = `translateX(${dx}px) rotate(${dx * 0.05}deg)`;
+          currentCard.style.opacity = 1 - Math.abs(dx) / (window.innerWidth * 1.5);
         }
       }
     }
@@ -1651,18 +1615,17 @@
       const endY = e.changedTouches[0].clientY;
       const dx = endX - startX;
       const dy = endY - startY;
-      const deltaTime = Date.now() - startTime;
+      const deltaTime = (/* @__PURE__ */ new Date()).getTime() - startTime;
       const currentCard = getCurrentCard();
       if (currentCard) {
         currentCard.classList.remove("swiping");
-        currentCard.style.willChange = "";
         currentCard.style.transform = "";
         currentCard.style.opacity = "";
       }
       isDragging = false;
-      const quickSwipe = deltaTime < 200;
-      const distanceThreshold = quickSwipe ? 30 : window.innerWidth * 0.25;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > distanceThreshold) {
+      const threshold = window.innerWidth * 0.15;
+      const velocity = Math.abs(dx) / deltaTime;
+      if (Math.abs(dx) > threshold || velocity > 0.2) {
         if (dx > 0) {
           prevCard();
         } else {
@@ -1672,14 +1635,12 @@
     }
     container.addEventListener("touchstart", handleTouchStart, { passive: false });
     container.addEventListener("touchmove", handleTouchMove, { passive: false });
-    container.addEventListener("touchend", handleTouchEnd, { passive: true });
-    updateCardPositions();
+    container.addEventListener("touchend", handleTouchEnd);
     return {
       getCurrentIndex: () => currentIndex,
       next: nextCard,
       prev: prevCard,
-      getCurrentCard,
-      updateCards
+      getCurrentCard
     };
   }
   var init_ui_swipe = __esm({
@@ -2149,28 +2110,13 @@ Match Stats:`;
       return;
     try {
       const performers = await fetchPerformersForSelection(5);
-      const existingCards = listEl.querySelectorAll(".hon-selection-card");
-      if (existingCards.length > performers.length) {
-        for (let i = performers.length; i < existingCards.length; i++) {
-          existingCards[i].remove();
-        }
-      }
+      listEl.innerHTML = "";
+      let cards = [];
       performers.forEach((performer, index) => {
-        let card;
-        if (index < existingCards.length) {
-          card = existingCards[index];
-          card.dataset.performerId = performer.id;
-          const infoContainer = card.querySelector(".hon-selection-info");
-          if (infoContainer) {
-            infoContainer.innerHTML = createSelectionCardContent(performer);
-          }
-        } else {
-          const cardHtml = createSelectionCard(performer);
-          const tempDiv = document.createElement("div");
-          tempDiv.innerHTML = cardHtml;
-          card = tempDiv.firstElementChild;
-          listEl.appendChild(card);
-        }
+        const cardHtml = createSelectionCard(performer);
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = cardHtml;
+        const card = tempDiv.firstElementChild;
         card.style.opacity = "0";
         card.style.transform = "translateY(20px)";
         card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
@@ -2181,87 +2127,48 @@ Match Stats:`;
         card.onclick = () => {
           startGauntletWithPerformer(performer);
         };
+        listEl.appendChild(card);
+        cards.push(card);
       });
       const isRealMobileDevice = isMobile() && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-      if (isRealMobileDevice) {
-        setupMobileCarousel(listEl, performers);
+      if (isRealMobileDevice && cards.length > 0) {
+        listEl.style.display = "block";
+        const wrapper = document.createElement("div");
+        wrapper.className = "hon-vs-container";
+        wrapper.style.position = "relative";
+        wrapper.style.width = "100%";
+        wrapper.style.overflow = "hidden";
+        while (listEl.firstChild) {
+          wrapper.appendChild(listEl.firstChild);
+        }
+        listEl.appendChild(wrapper);
+        const carousel = enableCardCarousel(wrapper, cards);
+        cards.forEach((card, index) => {
+          card.onclick = (e) => {
+            if (carousel && carousel.getCurrentIndex() === index) {
+              const performerId = card.dataset.performerId;
+              const performer = performers.find((p) => p.id == performerId);
+              if (performer) {
+                startGauntletWithPerformer(performer);
+              }
+            } else if (carousel) {
+              const currentIndex = carousel.getCurrentIndex();
+              const direction = index > currentIndex ? 1 : -1;
+              const steps = Math.abs(index - currentIndex);
+              for (let i = 0; i < steps; i++) {
+                if (direction > 0) {
+                  carousel.next();
+                } else {
+                  carousel.prev();
+                }
+              }
+            }
+          };
+        });
       }
     } catch (err) {
       listEl.innerHTML = `<div class="hon-error">Error: ${err.message}</div>`;
     }
-  }
-  function createSelectionCardContent(performer) {
-    const name = performer.name || `Performer #${performer.id}`;
-    let ratingDisplay;
-    let tierDisplay = "";
-    let tierClass = "";
-    if (performer.rating100 === null || performer.rating100 === 1) {
-      ratingDisplay = "<span class='hon-selection-rating-value'>Unrated</span>";
-      tierClass = "tier-f";
-    } else {
-      const ratingValue = performer.rating100;
-      ratingDisplay = `<span class='hon-selection-rating-value'>${(ratingValue / 10).toFixed(1)}</span>`;
-      const tier = getRatingTier(ratingValue);
-      const tierColor = getTierColor(tier);
-      tierDisplay = `<span class="hon-selection-tier" style="color: ${tierColor}">${tier}</span> | `;
-      switch (tier) {
-        case "S-Tier":
-          tierClass = "tier-s";
-          break;
-        case "A-Tier":
-          tierClass = "tier-a";
-          break;
-        case "B-Tier":
-          tierClass = "tier-b";
-          break;
-        case "C-Tier":
-          tierClass = "tier-c";
-          break;
-        case "D-Tier":
-          tierClass = "tier-d";
-          break;
-        case "F-Tier":
-          tierClass = "tier-f";
-          break;
-        default:
-          tierClass = "tier-f";
-      }
-    }
-    let genderIcon = "";
-    if (performer.gender) {
-      const genderKey = performer.gender.toUpperCase();
-      genderIcon = GENDER_ICONS[genderKey] || "\u{1F464}";
-    }
-    let countryDisplay = "";
-    if (performer.country) {
-      countryDisplay = getCountryDisplay(performer.country);
-    }
-    let heightDisplay = "";
-    if (performer.height_cm) {
-      heightDisplay = formatHeight2(performer.height_cm);
-    }
-    const metaItems = [];
-    if (countryDisplay) {
-      metaItems.push(`<div class="hon-selection-meta-item"><strong>Country:</strong> ${countryDisplay}</div>`);
-    }
-    if (heightDisplay) {
-      metaItems.push(`<div class="hon-selection-meta-item"><strong>Height:</strong> ${heightDisplay}</div>`);
-    }
-    if (performer.measurements) {
-      metaItems.push(`<div class="hon-selection-meta-item"><strong>Measurements:</strong> ${performer.measurements}</div>`);
-    }
-    if (performer.fake_tits) {
-      metaItems.push(`<div class="hon-selection-meta-item"><strong>Fake Tits:</strong> ${performer.fake_tits}</div>`);
-    }
-    if (performer.tags && performer.tags.length > 0) {
-      const tagNames = performer.tags.map((tag) => tag.name || tag).join(", ");
-      metaItems.push(`<div class="hon-selection-meta-item"><strong>Tags:</strong> ${tagNames}</div>`);
-    }
-    return `
-    <h4 class="hon-selection-name">${name} ${genderIcon}</h4>
-    <div class="hon-selection-rating">Rating: ${tierDisplay}${ratingDisplay}</div>
-    ${metaItems.join("")}
-  `;
   }
   function startGauntletWithPerformer(performer) {
     resetBattleState();
@@ -2271,27 +2178,12 @@ Match Stats:`;
     const sel = document.getElementById("hon-performer-selection");
     const comp = document.getElementById("hon-comparison-area");
     const actions = document.querySelector(".hon-actions");
-    if (sel) {
-      sel.style.opacity = "0";
-      sel.style.pointerEvents = "none";
-      setTimeout(() => {
-        sel.style.display = "none";
-      }, 300);
-    }
-    if (comp) {
+    if (sel)
+      sel.style.display = "none";
+    if (comp)
       comp.style.display = "";
-      comp.style.opacity = "0";
-      setTimeout(() => {
-        comp.style.opacity = "1";
-      }, 50);
-    }
-    if (actions) {
+    if (actions)
       actions.style.display = "";
-      actions.style.opacity = "0";
-      setTimeout(() => {
-        actions.style.opacity = "1";
-      }, 100);
-    }
     loadNewPair();
   }
   function showPerformerSelection() {
@@ -2300,24 +2192,12 @@ Match Stats:`;
     const actionsEl = document.querySelector(".hon-actions");
     if (selectionContainer) {
       selectionContainer.style.display = "block";
-      selectionContainer.style.opacity = "0";
-      setTimeout(() => {
-        selectionContainer.style.opacity = "1";
-      }, 10);
       loadPerformerSelection();
     }
-    if (comparisonArea) {
-      comparisonArea.style.opacity = "0";
-      setTimeout(() => {
-        comparisonArea.style.display = "none";
-      }, 300);
-    }
-    if (actionsEl) {
-      actionsEl.style.opacity = "0";
-      setTimeout(() => {
-        actionsEl.style.display = "none";
-      }, 300);
-    }
+    if (comparisonArea)
+      comparisonArea.style.display = "none";
+    if (actionsEl)
+      actionsEl.style.display = "none";
     const modal = document.getElementById("hon-modal");
     if (modal) {
       modal.classList.remove("hon-mode-champion", "hon-mode-swiss");
@@ -2609,55 +2489,24 @@ Match Stats:`;
     loadNewPair: () => loadNewPair
   });
   function attachBattleListeners(area) {
-    let cachedCarousel = null;
     if (isMobile()) {
       const container = area.querySelector(".hon-vs-container");
       if (container) {
         const cards = Array.from(container.querySelectorAll(".hon-scene-card"));
         if (cards.length >= 2) {
-          if (!cachedCarousel || !container._carouselInitialized || container._cardCount !== cards.length) {
-            cachedCarousel = enableCardCarousel(container, cards);
-            container._carouselInitialized = true;
-            container._cardCount = cards.length;
-            container._carouselInstance = cachedCarousel;
-          } else {
-            cachedCarousel = container._carouselInstance;
-            if (cachedCarousel && typeof cachedCarousel.updateCards === "function") {
-              cachedCarousel.updateCards(cards);
-            }
-          }
-          let clickLock = false;
+          const carousel = enableCardCarousel(container, cards);
+          let clickTimeout;
           cards.forEach((card, index) => {
-            const body = card.querySelector(".hon-scene-body");
-            if (body) {
-              body.addEventListener("click", (e) => {
-                if (clickLock || state.disableChoice)
-                  return;
-                clickLock = true;
-                setTimeout(() => {
-                  clickLock = false;
-                }, 200);
-                e.stopPropagation();
-                if (cachedCarousel) {
-                  const currentIndex = cachedCarousel.getCurrentIndex();
-                  if (index === currentIndex) {
-                    handleChooseItem(e);
-                  } else {
-                    const direction = index > currentIndex ? 1 : -1;
-                    const steps = Math.abs(index - currentIndex);
-                    for (let i = 0; i < steps; i++) {
-                      if (direction > 0) {
-                        cachedCarousel.next();
-                      } else {
-                        cachedCarousel.prev();
-                      }
-                    }
-                  }
-                } else {
-                  handleChooseItem(e);
-                }
-              });
-            }
+            card.querySelector(".hon-scene-body").addEventListener("click", (e) => {
+              if (clickTimeout)
+                return;
+              clickTimeout = setTimeout(() => {
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
+              }, 300);
+              e.stopPropagation();
+              handleChooseItem(e);
+            });
           });
         }
       }
@@ -2749,17 +2598,17 @@ Match Stats:`;
       state.currentRanks = { left: result.ranks[0], right: result.ranks[1] };
       const container = area.querySelector(".hon-vs-container");
       if (container) {
-        const fragment = document.createDocumentFragment();
-        fragment.appendChild(renderCard(left, "left", result.ranks[0]));
-        fragment.appendChild(renderCard(right, "right", result.ranks[1]));
-        container.appendChild(fragment);
+        container.innerHTML = `
+		${renderCard(left, "left", result.ranks[0])}
+		${renderCard(right, "right", result.ranks[1])}
+	  `;
       } else {
         area.innerHTML = `
-        <div class="hon-vs-container">
-          ${renderCard(left, "left", result.ranks[0])}
-          ${renderCard(right, "right", result.ranks[1])}
-        </div>
-      `;
+		<div class="hon-vs-container">
+		  ${renderCard(left, "left", result.ranks[0])}
+		  ${renderCard(right, "right", result.ranks[1])}
+		</div>
+	  `;
       }
       attachBattleListeners(area);
       if (isMobile()) {
@@ -2772,12 +2621,6 @@ Match Stats:`;
           }
         }
       }
-      setTimeout(() => {
-        const comparisonArea = document.getElementById("hon-comparison-area");
-        if (comparisonArea) {
-          ensureElementVisible(comparisonArea, 80);
-        }
-      }, 100);
     } catch (err) {
       area.innerHTML = `<div class="hon-error">Error: ${err.message}</div>`;
     }
@@ -3136,7 +2979,6 @@ Match Stats:`;
       init_match_handler();
       init_ui_swipe();
       init_rating_utils();
-      init_dom_utils();
     }
   });
 
@@ -3166,6 +3008,11 @@ Match Stats:`;
       default:
         return "";
     }
+  }
+  function formatWeight(weight) {
+    if (weight === void 0 || weight === null)
+      return "N/A\u2690";
+    return (weight / 10).toFixed(1);
   }
   function calculateTimeUntilFull(performer) {
     if (!performer.last_match || performer.weight >= 1e3)
@@ -3223,7 +3070,7 @@ Match Stats:`;
     </div>
   `;
     document.body.appendChild(statsModal);
-    let closeStats = () => statsModal.remove();
+    const closeStats = () => statsModal.remove();
     const dialogContainer = statsModal.querySelector(".hon-stats-modal-dialog");
     dialogContainer.addEventListener("click", (e) => e.stopPropagation());
     statsModal.querySelector(".hon-modal-backdrop").addEventListener("click", closeStats);
@@ -3238,13 +3085,10 @@ Match Stats:`;
       }
       dialogContainer.innerHTML = `
       <button class="hon-modal-close">\u2715</button>
-      ${typeof cachedModalContent === "string" ? cachedModalContent : cachedModalContent.outerHTML}
+      ${cachedModalContent}
     `;
       dialogContainer.addEventListener("click", (e) => e.stopPropagation());
-      const closeBtn = dialogContainer.querySelector(".hon-modal-close");
-      if (closeBtn) {
-        closeBtn.addEventListener("click", closeStats);
-      }
+      dialogContainer.querySelector(".hon-modal-close").addEventListener("click", closeStats);
       const refreshBtn = dialogContainer.querySelector("#refresh-stats-btn");
       if (refreshBtn) {
         refreshBtn.addEventListener("click", async (e) => {
@@ -3252,30 +3096,10 @@ Match Stats:`;
           await openStatsModal(true);
         });
       }
-      let cleanupFunction = null;
-      const initNonCriticalComponents = () => {
-        initStatsTabs(dialogContainer);
-        initStatsCollapsibles(dialogContainer);
-        initStatsSorting(dialogContainer);
-        cleanupFunction = initWeightCountdowns();
-      };
-      if ("requestIdleCallback" in window) {
-        requestIdleCallback(initNonCriticalComponents, { timeout: 2e3 });
-      } else {
-        setTimeout(initNonCriticalComponents, 0);
-      }
-      const originalCloseStats = closeStats;
-      closeStats = () => {
-        if (cleanupFunction) {
-          cleanupFunction();
-        }
-        originalCloseStats();
-      };
-      const newCloseBtn = dialogContainer.querySelector(".hon-modal-close");
-      if (newCloseBtn) {
-        newCloseBtn.removeEventListener("click", originalCloseStats);
-        newCloseBtn.addEventListener("click", closeStats);
-      }
+      initStatsTabs(dialogContainer);
+      initStatsCollapsibles(dialogContainer);
+      initStatsSorting(dialogContainer);
+      initWeightCountdowns();
       const activeDistributionTab = dialogContainer.querySelector('.hon-stats-tab[data-tab="distribution"].active');
       if (activeDistributionTab) {
         setTimeout(() => {
@@ -3291,10 +3115,7 @@ Match Stats:`;
       <button class="hon-modal-close">\u2715</button>
       <div class="hon-stats-error">Failed to load statistics.</div>
     `;
-      const closeBtn = dialogContainer.querySelector(".hon-modal-close");
-      if (closeBtn) {
-        closeBtn.addEventListener("click", closeStats);
-      }
+      dialogContainer.querySelector(".hon-modal-close").addEventListener("click", closeStats);
     }
   }
   function createStatsModalContent(performers) {
@@ -3326,6 +3147,7 @@ Match Stats:`;
       return {
         ...stats,
         rank,
+        // NOW USING PROPER RANKING LOGIC
         id: p.id,
         name: p.name || `Performer #${p.id}`,
         rating: displayRating,
@@ -3336,50 +3158,32 @@ Match Stats:`;
         last_match: stats.last_match || null
       };
     });
-    const rankGroupsFragment = generateStatTables(processedPerformers);
+    const rankGroupsHTML = generateStatTables(processedPerformers);
     const ratingBuckets = new Array(101).fill(0);
     performers.forEach((p) => {
       const r = p.rating100 ?? 1;
       if (r >= 0 && r <= 100)
         ratingBuckets[r]++;
     });
-    const contentWrapper = document.createElement("div");
-    const headerDiv = document.createElement("div");
-    headerDiv.className = "hon-stats-header";
-    const title = document.createElement("h2");
-    title.textContent = "\u{1F4CA} Performer Statistics";
-    headerDiv.appendChild(title);
-    const tabsDiv = document.createElement("div");
-    tabsDiv.className = "hon-stats-tabs";
-    const leaderboardTab = document.createElement("button");
-    leaderboardTab.className = "hon-stats-tab active";
-    leaderboardTab.dataset.tab = "leaderboard";
-    leaderboardTab.textContent = "Leaderboard";
-    tabsDiv.appendChild(leaderboardTab);
-    const distributionTab = document.createElement("button");
-    distributionTab.className = "hon-stats-tab";
-    distributionTab.dataset.tab = "distribution";
-    distributionTab.textContent = "Rating Distribution";
-    tabsDiv.appendChild(distributionTab);
-    headerDiv.appendChild(tabsDiv);
-    contentWrapper.appendChild(headerDiv);
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "hon-stats-content";
-    const leaderboardPanel = document.createElement("div");
-    leaderboardPanel.className = "hon-stats-tab-panel active";
-    leaderboardPanel.dataset.panel = "leaderboard";
-    leaderboardPanel.appendChild(rankGroupsFragment);
-    contentDiv.appendChild(leaderboardPanel);
-    const distributionPanel = document.createElement("div");
-    distributionPanel.className = "hon-stats-tab-panel";
-    distributionPanel.dataset.panel = "distribution";
-    const barGraphDiv = document.createElement("div");
-    barGraphDiv.className = "hon-bar-graph";
-    barGraphDiv.innerHTML = generateBarGroups(ratingBuckets);
-    distributionPanel.appendChild(barGraphDiv);
-    contentDiv.appendChild(distributionPanel);
-    contentWrapper.appendChild(contentDiv);
-    return contentWrapper.outerHTML;
+    return `
+    <div class="hon-stats-header">
+      <h2>\u{1F4CA} Performer Statistics</h2>
+      <div class="hon-stats-tabs">
+        <button class="hon-stats-tab active" data-tab="leaderboard">Leaderboard</button>
+        <button class="hon-stats-tab" data-tab="distribution">Rating Distribution</button>
+      </div>
+    </div>
+    <div class="hon-stats-content">
+      <div class="hon-stats-tab-panel active" data-panel="leaderboard">
+        ${rankGroupsHTML}
+      </div>
+      <div class="hon-stats-tab-panel" data-panel="distribution">
+        <div class="hon-bar-graph">
+          ${generateBarGroups(ratingBuckets)}
+        </div>
+      </div>
+    </div>
+  `;
   }
   function generateStatTables(processedPerformers) {
     const tierGroups = {};
@@ -3403,156 +3207,217 @@ Match Stats:`;
       };
       return tierValues[b] - tierValues[a];
     });
-    const fragment = document.createDocumentFragment();
-    const allTiersGroup = createTierGroupDOM("all-tiers", "All Tiers", "#ffffff", processedPerformers.length, processedPerformers);
-    fragment.appendChild(allTiersGroup);
-    sortedTiers.forEach((tier) => {
+    const tierGroupsHTML = sortedTiers.map((tier) => {
       const performersInTier = tierGroups[tier];
       const tierColor = getTierColor(tier);
-      const tierGroup = createTierGroupDOM(tier, tier, tierColor, performersInTier.length, performersInTier);
-      fragment.appendChild(tierGroup);
-    });
-    return fragment;
-  }
-  function createTierGroupDOM(tier, tierTitle, tierColor, count, performers) {
-    const groupDiv = document.createElement("div");
-    groupDiv.className = "hon-rank-group";
-    const headerDiv = document.createElement("div");
-    headerDiv.className = "hon-rank-group-header";
-    headerDiv.dataset.group = tier;
-    headerDiv.setAttribute("role", "button");
-    const toggleSpan = document.createElement("span");
-    toggleSpan.className = "hon-group-toggle";
-    toggleSpan.textContent = "\u25B6";
-    headerDiv.appendChild(toggleSpan);
-    const titleSpan = document.createElement("span");
-    titleSpan.className = "hon-rank-group-title";
-    titleSpan.style.color = tierColor;
-    titleSpan.style.fontWeight = "bold";
-    titleSpan.textContent = `${tierTitle} Performers (${count})`;
-    headerDiv.appendChild(titleSpan);
-    groupDiv.appendChild(headerDiv);
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "hon-rank-group-content collapsed";
-    contentDiv.dataset.group = tier;
-    const table = document.createElement("table");
-    table.className = "hon-stats-table";
-    const thead = document.createElement("thead");
-    const headerRow = document.createElement("tr");
-    const headers = [
-      { text: "Rank", sort: "rank" },
-      { text: "Country", sort: "country" },
-      { text: "Gender", sort: "gender" },
-      { text: "Name", sort: "name" },
-      { text: "Rating", sort: "rating" },
-      { text: "Matches", sort: "matches" },
-      { text: "W", sort: "wins" },
-      { text: "L", sort: "losses" },
-      { text: "D", sort: "draws" },
-      { text: "%", sort: "winrate" },
-      { text: "Streak", sort: "streak" },
-      { text: "Best", sort: "beststreak" },
-      { text: "Worst", sort: "worststreak" },
-      { text: "\u231B", sort: "weight" }
-    ];
-    headers.forEach((header) => {
-      const th = document.createElement("th");
-      th.dataset.sort = header.sort;
-      th.textContent = header.text;
-      headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    performers.forEach((p) => {
-      const row = createPerformerRow(p, tierColor);
-      tbody.appendChild(row);
-    });
-    table.appendChild(tbody);
-    contentDiv.appendChild(table);
-    groupDiv.appendChild(contentDiv);
-    return groupDiv;
-  }
-  function createPerformerRow(p, tierColor) {
-    const row = document.createElement("tr");
-    const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
-    const isUnrated = p.rating === "Unrated";
-    const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
-    row.dataset.rank = p.rank;
-    row.dataset.rating = p.rating;
-    row.dataset.rawRating = p.rawRating || 1;
-    row.dataset.matches = p.total_matches;
-    row.dataset.wins = p.wins;
-    row.dataset.losses = p.losses;
-    row.dataset.draws = p.draws || 0;
-    row.dataset.winrate = winRate;
-    row.dataset.streak = p.current_streak;
-    row.dataset.beststreak = p.best_streak;
-    row.dataset.worststreak = p.worst_streak;
-    row.dataset.country = p.countryCode || "N/A\u2690";
-    row.dataset.gender = p.gender;
-    row.dataset.weight = p.weight;
-    row.dataset.maxweight = 1e3;
-    const rankTd = document.createElement("td");
-    rankTd.className = "hon-stats-rank";
-    rankTd.textContent = `#${p.rank}`;
-    row.appendChild(rankTd);
-    const flag = getFlagEmoji(p.countryCode);
-    const countryCodeDisplay = p.countryCode || "N/A\u2690";
-    const countryTd = document.createElement("td");
-    countryTd.className = "hon-stats-country";
-    countryTd.textContent = `${flag} ${countryCodeDisplay}`;
-    row.appendChild(countryTd);
-    const genderEmoji = getGenderEmoji(p.gender);
-    const genderTd = document.createElement("td");
-    genderTd.className = "hon-stats-gender";
-    genderTd.textContent = genderEmoji;
-    row.appendChild(genderTd);
-    const nameTd = document.createElement("td");
-    nameTd.className = "hon-stats-name";
-    const nameLink = document.createElement("a");
-    nameLink.href = `/performers/${p.id}`;
-    nameLink.target = "_blank";
-    nameLink.textContent = escapeHtml(p.name);
-    nameTd.appendChild(nameLink);
-    row.appendChild(nameTd);
-    const ratingTd = document.createElement("td");
-    ratingTd.className = "hon-stats-rating";
-    ratingTd.style.color = tierColor;
-    ratingTd.style.fontWeight = "bold";
-    ratingTd.textContent = p.rating;
-    row.appendChild(ratingTd);
-    const stats = [
-      p.total_matches,
-      { text: p.wins, className: "hon-stats-positive" },
-      { text: p.losses, className: "hon-stats-negative" },
-      p.draws || 0,
-      `${winRate}%`,
-      p.current_streak > 0 ? { text: `+${p.current_streak}`, className: "hon-stats-positive" } : p.current_streak < 0 ? { text: p.current_streak, className: "hon-stats-negative" } : "0",
-      { text: formatBestStreakDisplay(p.best_streak), className: "hon-stats-positive" },
-      { text: p.worst_streak, className: "hon-stats-negative" }
-    ];
-    stats.forEach((stat) => {
-      const td = document.createElement("td");
-      if (typeof stat === "object" && stat.className) {
-        td.className = stat.className;
-        td.textContent = stat.text;
-      } else {
-        td.textContent = stat;
+      const rows = performersInTier.map((p) => {
+        const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
+        const streakDisplay = p.current_streak > 0 ? `<span class="hon-stats-positive">+${p.current_streak}</span>` : p.current_streak < 0 ? `<span class="hon-stats-negative">${p.current_streak}</span>` : "0";
+        const flag = getFlagEmoji(p.countryCode);
+        const countryCodeDisplay = p.countryCode || "N/A\u2690";
+        const genderEmoji = getGenderEmoji(p.gender);
+        const maxWeight = 1e3;
+        const rechargeRate = 1e3 / 12;
+        let currentWeight = maxWeight;
+        if (p.last_match) {
+          const lastMatchDate = new Date(p.last_match);
+          const msSince = Date.now() - lastMatchDate.getTime();
+          const hoursSince = msSince / (1e3 * 60 * 60);
+          const recovered = hoursSince * rechargeRate;
+          currentWeight = Math.min(maxWeight, recovered);
+        }
+        const weightFormatted = formatWeight(currentWeight);
+        let weightStatus;
+        if (currentWeight >= maxWeight) {
+          weightStatus = "\u{1F50B}";
+        } else if (currentWeight <= 0) {
+          weightStatus = "\u{1FAAB}";
+        } else {
+          weightStatus = "\u{1FAAB}";
+        }
+        const timeUntilFull = calculateTimeUntilFull({
+          ...p,
+          weight: currentWeight,
+          maxWeight,
+          rechargeRate
+        });
+        const countdownFormatted = formatCountdown(timeUntilFull);
+        const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus} ${weightFormatted}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}">${countdownFormatted}</small>`;
+        return `
+        <tr data-rank="${p.rank}" 
+            data-rating="${p.rating}" 
+            data-raw-rating="${p.rawRating || 1}"
+            data-matches="${p.total_matches}" 
+            data-wins="${p.wins}" 
+            data-losses="${p.losses}" 
+            data-draws="${p.draws || 0}" 
+            data-winrate="${winRate}" 
+            data-streak="${p.current_streak}" 
+            data-beststreak="${p.best_streak}" 
+            data-worststreak="${p.worst_streak}"
+            data-country="${countryCodeDisplay}"
+            data-gender="${p.gender}"
+            data-weight="${currentWeight}"
+            data-maxweight="${maxWeight}">
+          <td class="hon-stats-rank">#${p.rank}</td>
+          <td class="hon-stats-country">${flag} ${countryCodeDisplay}</td>
+          <td class="hon-stats-gender">${genderEmoji}</td>
+          <td class="hon-stats-name">
+            <a href="/performers/${p.id}" target="_blank">${escapeHtml(p.name)}</a>
+          </td>
+          <td class="hon-stats-rating" style="color: ${tierColor}; font-weight: bold;">
+            ${p.rating}
+          </td>
+          <td>${p.total_matches}</td>
+          <td class="hon-stats-positive">${p.wins}</td>
+          <td class="hon-stats-negative">${p.losses}</td>
+          <td>${p.draws || 0}</td>
+          <td>${winRate}%</td>
+          <td>${streakDisplay}</td>
+          <td class="hon-stats-positive">${formatBestStreakDisplay(p.best_streak)}</td>
+          <td class="hon-stats-negative">${p.worst_streak}</td>
+          <td class="hon-stats-weight">${weightDisplay}</td>
+        </tr>`;
+      }).join("");
+      return `
+      <div class="hon-rank-group">
+        <div class="hon-rank-group-header" data-group="${tier}" role="button">
+          <span class="hon-group-toggle">\u25B6</span>
+          <span class="hon-rank-group-title" style="color: ${tierColor}; font-weight: bold;">
+            ${tier} Performers (${performersInTier.length})
+          </span>
+        </div>
+        <div class="hon-rank-group-content collapsed" data-group="${tier}">
+          <table class="hon-stats-table">
+            <thead>
+              <tr>
+                <th data-sort="rank">Rank</th>
+                <th data-sort="country">Country</th>
+                <th data-sort="gender">Gender</th>
+                <th data-sort="name">Name</th>
+                <th data-sort="rating">Rating</th>
+                <th data-sort="matches">Matches</th>
+                <th data-sort="wins">W</th>
+                <th data-sort="losses">L</th>
+                <th data-sort="draws">D</th>
+                <th data-sort="winrate">%</th>
+                <th data-sort="streak">Streak</th>
+                <th data-sort="beststreak">Best</th>
+                <th data-sort="worststreak">Worst</th>
+                <th data-sort="weight">\u231B</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join("");
+    const allTiersRows = processedPerformers.map((p) => {
+      const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
+      const streakDisplay = p.current_streak > 0 ? `<span class="hon-stats-positive">+${p.current_streak}</span>` : p.current_streak < 0 ? `<span class="hon-stats-negative">${p.current_streak}</span>` : "0";
+      const flag = getFlagEmoji(p.countryCode);
+      const countryCodeDisplay = p.countryCode || "N/A\u2690";
+      const genderEmoji = getGenderEmoji(p.gender);
+      const maxWeight = 1e3;
+      const rechargeRate = 1e3 / 12;
+      let currentWeight = maxWeight;
+      if (p.last_match) {
+        const lastMatchDate = new Date(p.last_match);
+        const msSince = Date.now() - lastMatchDate.getTime();
+        const hoursSince = msSince / (1e3 * 60 * 60);
+        const recovered = hoursSince * rechargeRate;
+        currentWeight = Math.min(maxWeight, recovered);
       }
-      row.appendChild(td);
-    });
-    const weightTd = document.createElement("td");
-    weightTd.className = "hon-stats-weight";
-    const maxWeight = 1e3;
-    const weightStatus = p.weight >= maxWeight ? "\u{1F50B}" : "\u{1FAAB}";
-    if (p.weight >= maxWeight) {
-      weightTd.textContent = weightStatus;
-    } else {
-      weightTd.innerHTML = `${weightStatus} ${(p.weight / 10).toFixed(1)}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}">${formatCountdown(calculateTimeUntilFull(p))}</small>`;
-    }
-    row.appendChild(weightTd);
-    return row;
+      const weightFormatted = formatWeight(currentWeight);
+      let weightStatus;
+      if (currentWeight >= maxWeight) {
+        weightStatus = "\u{1F50B}";
+      } else if (currentWeight <= 0) {
+        weightStatus = "\u{1FAAB}";
+      } else {
+        weightStatus = "\u{1FAAB}";
+      }
+      const timeUntilFull = calculateTimeUntilFull({
+        ...p,
+        weight: currentWeight,
+        maxWeight,
+        rechargeRate
+      });
+      const countdownFormatted = formatCountdown(timeUntilFull);
+      const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus} ${weightFormatted}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}">${countdownFormatted}</small>`;
+      const isUnrated = p.rating === "Unrated";
+      const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
+      const tier = getRatingTier(numericRating);
+      const tierColor = getTierColor(tier);
+      return `
+      <tr data-rank="${p.rank}" 
+          data-rating="${p.rating}" 
+          data-raw-rating="${p.rawRating || 1}"
+          data-matches="${p.total_matches}" 
+          data-wins="${p.wins}" 
+          data-losses="${p.losses}" 
+          data-draws="${p.draws || 0}" 
+          data-winrate="${winRate}" 
+          data-streak="${p.current_streak}" 
+          data-beststreak="${p.best_streak}" 
+          data-worststreak="${p.worst_streak}"
+          data-country="${countryCodeDisplay}"
+          data-gender="${p.gender}"
+          data-weight="${currentWeight}"
+          data-maxweight="${maxWeight}">
+        <td class="hon-stats-rank">#${p.rank}</td>
+        <td class="hon-stats-country">${flag} ${countryCodeDisplay}</td>
+        <td class="hon-stats-gender">${genderEmoji}</td>
+        <td class="hon-stats-name">
+          <a href="/performers/${p.id}" target="_blank">${escapeHtml(p.name)}</a>
+        </td>
+        <td class="hon-stats-rating" style="color: ${tierColor}; font-weight: bold;">
+          ${p.rating}
+        </td>
+        <td>${p.total_matches}</td>
+        <td class="hon-stats-positive">${p.wins}</td>
+        <td class="hon-stats-negative">${p.losses}</td>
+        <td>${p.draws || 0}</td>
+        <td>${winRate}%</td>
+        <td>${streakDisplay}</td>
+        <td class="hon-stats-positive">${formatBestStreakDisplay(p.best_streak)}</td>
+        <td class="hon-stats-negative">${p.worst_streak}</td>
+        <td class="hon-stats-weight">${weightDisplay}</td>
+      </tr>`;
+    }).join("");
+    const allTiersOption = `
+    <div class="hon-rank-group">
+      <div class="hon-rank-group-header" data-group="all-tiers" role="button">
+        <span class="hon-group-toggle">\u25B6</span>
+        <span class="hon-rank-group-title" style="color: #ffffff; font-weight: bold;">
+          All Tiers (${processedPerformers.length})
+        </span>
+      </div>
+      <div class="hon-rank-group-content collapsed" data-group="all-tiers">
+        <table class="hon-stats-table">
+          <thead>
+            <tr>
+              <th data-sort="rank">Rank</th>
+              <th data-sort="country">Country</th>
+              <th data-sort="gender">Gender</th>
+              <th data-sort="name">Name</th>
+              <th data-sort="rating">Rating</th>
+              <th data-sort="matches">Matches</th>
+              <th data-sort="wins">W</th>
+              <th data-sort="losses">L</th>
+              <th data-sort="draws">D</th>
+              <th data-sort="winrate">%</th>
+              <th data-sort="streak">Streak</th>
+              <th data-sort="beststreak">Best</th>
+              <th data-sort="worststreak">Worst</th>
+              <th data-sort="weight">\u231B</th>
+            </tr>
+          </thead>
+          <tbody>${allTiersRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+    return allTiersOption + tierGroupsHTML;
   }
   function initStatsSorting(dialog) {
     const headers = dialog.querySelectorAll(".hon-stats-table th[data-sort]");
@@ -3604,10 +3469,8 @@ Match Stats:`;
     });
   }
   function initWeightCountdowns() {
-    let countdownElements = Array.from(document.querySelectorAll(".countdown"));
-    let animationFrameId;
-    const updateCountdowns = () => {
-      const now = Date.now();
+    setInterval(() => {
+      const countdownElements = document.querySelectorAll(".countdown");
       countdownElements.forEach((element) => {
         const lastMatchStr = element.dataset.lastMatch;
         if (!lastMatchStr) {
@@ -3618,14 +3481,13 @@ Match Stats:`;
           return;
         }
         const lastMatchDate = new Date(lastMatchStr);
-        const msSince = now - lastMatchDate.getTime();
+        const msSince = Date.now() - lastMatchDate.getTime();
         const hoursSince = msSince / (1e3 * 60 * 60);
         const rechargeRatePerHour = 1e3 / 12;
         const recovered = hoursSince * rechargeRatePerHour;
         const currentWeight = Math.min(1e3, recovered);
         if (currentWeight >= 1e3) {
           element.parentElement.innerHTML = "\u{1F50B}";
-          countdownElements = countdownElements.filter((el) => el !== element);
           return;
         }
         const remaining = 1e3 - currentWeight;
@@ -3633,23 +3495,11 @@ Match Stats:`;
         const secondsUntilFull = Math.max(0, Math.ceil(hoursUntilFull * 3600));
         if (secondsUntilFull <= 0) {
           element.parentElement.innerHTML = "\u{1F50B}";
-          countdownElements = countdownElements.filter((el) => el !== element);
         } else {
           element.textContent = formatCountdown(secondsUntilFull);
         }
       });
-      if (countdownElements.length > 0) {
-        animationFrameId = requestAnimationFrame(updateCountdowns);
-      }
-    };
-    if (countdownElements.length > 0) {
-      animationFrameId = requestAnimationFrame(updateCountdowns);
-    }
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
+    }, 1e3);
   }
   function generateBarGroups(ratingBuckets) {
     const tiers = [
@@ -4536,15 +4386,16 @@ Match Stats:`;
     }
   }
   function closeRankingModal() {
-    if (modalCache) {
-      modalCache.style.display = "none";
-    }
+    const gameModal = document.getElementById("hon-modal");
     const statsModal = document.getElementById("hon-stats-modal");
+    if (gameModal)
+      gameModal.style.display = "none";
     if (statsModal)
       statsModal.style.display = "none";
     document.removeEventListener("keydown", handleGlobalKeys, { capture: true });
     cleanupButtonObserver();
     destroyEventLog();
+    clearDOMCache();
   }
   function handleGlobalKeys(e) {
     const activeModal = document.getElementById("hon-modal");
@@ -4588,11 +4439,11 @@ Match Stats:`;
   }
   async function _buildAndOpenModal() {
     try {
-      if (!modalCache) {
-        console.log("[Ascension] Creating new modal instance");
-        modalCache = document.createElement("div");
-        modalCache.id = "hon-modal";
-        modalCache.className = "hon-modal";
+      let modal = document.getElementById("hon-modal");
+      if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "hon-modal";
+        modal.className = "hon-modal";
         initEventLog();
         const { createSidebar: createSidebar2, attachSidebarEventListeners: attachSidebarEventListeners2 } = await Promise.resolve().then(() => (init_ui_sidebar(), ui_sidebar_exports));
         const { isMobile: isMobile2 } = await Promise.resolve().then(() => (init_ui_swipe(), ui_swipe_exports));
@@ -4627,7 +4478,7 @@ Match Stats:`;
             </div>
           </div>
         </div>`;
-        modalCache.innerHTML = `
+        modal.innerHTML = `
         <div class="hon-modal-backdrop"></div>
         <div class="hon-modal-content ${mobileCheck ? "mobile" : ""}">
           <span class="hon-modal-close">\u2715</span>
@@ -4679,35 +4530,38 @@ Match Stats:`;
             box-shadow: none;
           }
         `;
-          modalCache.appendChild(style);
+          modal.appendChild(style);
         }
-        document.body.appendChild(modalCache);
-        const sidebarContainer = modalCache.querySelector("#hon-sidebar");
+        document.body.appendChild(modal);
+        const sidebarContainer = modal.querySelector("#hon-sidebar");
         if (sidebarContainer) {
-          attachSidebarEventListeners2(modalCache);
+          attachSidebarEventListeners2(modal);
         }
         const { attachEventListeners: attachEventListeners2 } = await Promise.resolve().then(() => (init_ui_dashboard(), ui_dashboard_exports));
-        attachEventListeners2(modalCache);
-        const closeModalBtn = modalCache.querySelector(".hon-modal-close");
+        attachEventListeners2(modal);
+        const closeModalBtn = modal.querySelector(".hon-modal-close");
         if (closeModalBtn) {
           closeModalBtn.onclick = () => closeRankingModal();
         }
-        const modalBackdrop = modalCache.querySelector(".hon-modal-backdrop");
+        const modalBackdrop = modal.querySelector(".hon-modal-backdrop");
         if (modalBackdrop) {
           modalBackdrop.onclick = () => closeRankingModal();
         }
-        isModalInitialized = true;
-        console.log("[Ascension] Modal initialization complete");
-      } else {
-        console.log("[Ascension] Reusing cached modal instance");
       }
-      modalCache.style.display = "block";
+      modal.style.display = "flex";
+      modal.style.alignItems = "center";
+      modal.style.justifyContent = "center";
+      modal.style.position = "fixed";
+      modal.style.top = "0";
+      modal.style.left = "0";
+      modal.style.width = "100%";
+      modal.style.height = "100%";
       const { loadNewPair: loadNewPair2 } = await Promise.resolve().then(() => (init_battle_engine(), battle_engine_exports));
       if (state.currentMode === "gauntlet") {
         if (state.gauntletChampion) {
-          const selEl = modalCache.querySelector("#hon-performer-selection");
-          const compEl = modalCache.querySelector("#hon-comparison-area");
-          const actEl = modalCache.querySelector(".hon-actions");
+          const selEl = document.getElementById("hon-performer-selection");
+          const compEl = document.getElementById("hon-comparison-area");
+          const actEl = document.querySelector(".hon-actions");
           if (selEl)
             selEl.style.display = "none";
           if (compEl)
@@ -4716,8 +4570,7 @@ Match Stats:`;
             actEl.style.display = "";
           loadNewPair2();
         } else {
-          const { showPerformerSelection: showPerformerSelection2 } = await Promise.resolve().then(() => (init_gauntlet_selection(), gauntlet_selection_exports));
-          showPerformerSelection2();
+          window.showPerformerSelection();
         }
       } else {
         loadNewPair2();
@@ -4767,7 +4620,7 @@ Match Stats:`;
       console.error("CRASH in openRankingModal:", err);
     }
   }
-  var modalCache, isModalInitialized, buttonObserver;
+  var buttonObserver;
   var init_ui_modal = __esm({
     "ui-modal.js"() {
       init_state();
@@ -4776,8 +4629,6 @@ Match Stats:`;
       init_dom_utils();
       init_ui_sidebar();
       init_ui_event_log();
-      modalCache = null;
-      isModalInitialized = false;
       buttonObserver = null;
       window._honCleanupButtonObserver = cleanupButtonObserver;
       watchForNavigation();
@@ -4796,8 +4647,6 @@ Match Stats:`;
     attachEventListeners: () => attachEventListeners,
     createMainUI: () => createMainUI,
     handleGenderToggle: () => handleGenderToggle,
-    setErrorMessage: () => setErrorMessage,
-    setLoadingMessage: () => setLoadingMessage,
     setMode: () => setMode
   });
   function createMainUI() {
@@ -4823,11 +4672,11 @@ Match Stats:`;
         ${isPerformers ? `<button id="hon-stats-btn" class="btn btn-primary">\u{1F4CA} View All Stats</button>` : ""}
       </div>
       <div id="hon-performer-selection" style="display: none;">
-        <div id="hon-performer-list">Initializing performer selection...</div>
+        <div id="hon-performer-list">Loading...</div>
       </div>
       <div class="hon-content">
         <div id="hon-comparison-area">
-          <div class="hon-loading">Preparing battle arena...</div>
+          <div class="hon-loading">Loading...</div>
         </div>
         <div class="hon-actions">
           <div class="hon-action-buttons">
@@ -4845,46 +4694,11 @@ Match Stats:`;
       </div>
     </div>`;
   }
-  function setLoadingMessage(message) {
-    const loader = document.querySelector(".hon-loading");
-    if (loader) {
-      loader.textContent = message;
-      loader.className = "hon-loading";
-    }
-  }
-  function setErrorMessage(message) {
-    const loader = document.querySelector(".hon-loading");
-    if (loader) {
-      loader.textContent = `\u26A0\uFE0F ${message}`;
-      loader.className = "hon-loading hon-error";
-    }
-  }
-  function debounce2(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  }
   function attachEventListeners(parent = document) {
-    let isFirstLoad = false;
     if (!attachedElements.has(parent)) {
       attachedElements.set(parent, /* @__PURE__ */ new Set());
-      isFirstLoad = true;
     }
     const attachedSet = attachedElements.get(parent);
-    if (isFirstLoad) {
-      setTimeout(() => {
-        const comparisonArea = document.getElementById("hon-comparison-area");
-        if (comparisonArea) {
-          ensureElementVisible(comparisonArea, 80);
-        }
-      }, 500);
-    }
     const statsBtn = parent.querySelector("#hon-stats-btn");
     if (statsBtn && !attachedSet.has("statsBtn")) {
       const handler = () => {
@@ -4914,34 +4728,17 @@ Match Stats:`;
         e.stopPropagation();
         const isSkippableMode = state.currentMode === "swiss" || state.currentMode === "gauntlet" || state.currentMode === "champion";
         if (isSkippableMode) {
-          setLoadingMessage("Skipping current match...");
-          try {
-            const { handleSkip: handleSkip2 } = await Promise.resolve().then(() => (init_match_handler(), match_handler_exports));
-            await handleSkip2();
-          } catch (error) {
-            setErrorMessage("Failed to skip match. Retrying...");
-            setTimeout(() => {
-              const area = document.getElementById("hon-comparison-area");
-              if (area)
-                area.innerHTML = '<div class="hon-loading">Retrying skip...</div>';
-              handleSkip();
-            }, 1500);
-          }
+          const { handleSkip: handleSkip2 } = await Promise.resolve().then(() => (init_match_handler(), match_handler_exports));
+          handleSkip2();
         }
       };
-      skipBtn.addEventListener("click", debounce2(handler, 300));
+      skipBtn.addEventListener("click", handler);
       attachedSet.add("skipBtn");
     }
     const undoBtn = parent.querySelector("#hon-undo-btn");
     if (undoBtn && !attachedSet.has("undoBtn")) {
-      const handler = () => {
-        setLoadingMessage("Undoing last action...");
-        handleUndo().catch((err) => {
-          setErrorMessage("Undo failed. Please try again.");
-          console.error("[Ascension] Undo error:", err);
-        });
-      };
-      undoBtn.onclick = debounce2(handler, 300);
+      const handler = () => handleUndo();
+      undoBtn.onclick = handler;
       undoBtn.style.display = state.matchHistory && state.matchHistory.length > 0 ? "inline-block" : "none";
       attachedSet.add("undoBtn");
     }
@@ -4949,11 +4746,8 @@ Match Stats:`;
     genderButtons.forEach((btn, index) => {
       const key = `gender-${index}`;
       if (!attachedSet.has(key)) {
-        const handler = () => {
-          setLoadingMessage("Updating gender filter...");
-          handleGenderToggle(btn.dataset.gender);
-        };
-        btn.addEventListener("click", debounce2(handler, 300));
+        const handler = () => handleGenderToggle(btn.dataset.gender);
+        btn.addEventListener("click", handler);
         attachedSet.add(key);
       }
     });
@@ -4963,63 +4757,57 @@ Match Stats:`;
       if (!attachedSet.has(key)) {
         const handler = async () => {
           const newMode = btn.dataset.mode;
-          setLoadingMessage(`Switching to ${newMode} mode...`);
-          try {
-            state.currentMode = newMode;
-            modeButtons.forEach((button) => {
-              button.classList.toggle("active", button.dataset.mode === newMode);
-            });
-            const { getPerformerIdFromUrl: getPerformerIdFromUrl2 } = await Promise.resolve().then(() => (init_ui_modal(), ui_modal_exports));
-            const urlPerformerId = getPerformerIdFromUrl2();
-            state.gauntletChampion = null;
-            state.gauntletWins = 0;
-            state.gauntletDefeated = [];
-            state.gauntletFalling = false;
-            const modal = document.getElementById("hon-modal");
-            if (modal) {
-              modal.classList.remove("hon-mode-champion", "hon-mode-swiss", "hon-mode-gauntlet");
-              modal.classList.add(`hon-mode-${newMode}`);
+          state.currentMode = newMode;
+          modeButtons.forEach((button) => {
+            button.classList.toggle("active", button.dataset.mode === newMode);
+          });
+          const { getPerformerIdFromUrl: getPerformerIdFromUrl2 } = await Promise.resolve().then(() => (init_ui_modal(), ui_modal_exports));
+          const urlPerformerId = getPerformerIdFromUrl2();
+          state.gauntletChampion = null;
+          state.gauntletWins = 0;
+          state.gauntletDefeated = [];
+          state.gauntletFalling = false;
+          const modal = document.getElementById("hon-modal");
+          if (modal) {
+            modal.classList.remove("hon-mode-champion", "hon-mode-swiss", "hon-mode-gauntlet");
+            modal.classList.add(`hon-mode-${newMode}`);
+          }
+          const selectionContainer = document.getElementById("hon-performer-selection");
+          const comparisonArea = document.getElementById("hon-comparison-area");
+          const actionsEl = document.querySelector(".hon-actions");
+          if (newMode === "swiss") {
+            if (selectionContainer)
+              selectionContainer.style.display = "none";
+            if (comparisonArea)
+              comparisonArea.style.display = "";
+            if (actionsEl)
+              actionsEl.style.display = "";
+            loadNewPair();
+          } else if (newMode === "gauntlet" || newMode === "champion") {
+            if (urlPerformerId) {
+              const { fetchPerformerById: fetchPerformerById2 } = await Promise.resolve().then(() => (init_api_client(), api_client_exports));
+              state.gauntletChampion = await fetchPerformerById2(urlPerformerId);
             }
-            const selectionContainer = document.getElementById("hon-performer-selection");
-            const comparisonArea = document.getElementById("hon-comparison-area");
-            const actionsEl = document.querySelector(".hon-actions");
-            if (newMode === "swiss") {
+            if (state.gauntletChampion) {
               if (selectionContainer)
                 selectionContainer.style.display = "none";
               if (comparisonArea)
                 comparisonArea.style.display = "";
               if (actionsEl)
                 actionsEl.style.display = "";
-              await loadNewPair();
-            } else if (newMode === "gauntlet" || newMode === "champion") {
-              if (urlPerformerId) {
-                const { fetchPerformerById: fetchPerformerById2 } = await Promise.resolve().then(() => (init_api_client(), api_client_exports));
-                state.gauntletChampion = await fetchPerformerById2(urlPerformerId);
-              }
-              if (state.gauntletChampion) {
-                if (selectionContainer)
-                  selectionContainer.style.display = "none";
-                if (comparisonArea)
-                  comparisonArea.style.display = "";
-                if (actionsEl)
-                  actionsEl.style.display = "";
-                await loadNewPair();
-              } else {
-                if (selectionContainer)
-                  selectionContainer.style.display = "block";
-                if (comparisonArea)
-                  comparisonArea.style.display = "none";
-                if (actionsEl)
-                  actionsEl.style.display = "none";
-                Promise.resolve().then(() => (init_gauntlet_selection(), gauntlet_selection_exports)).then((m) => m.loadPerformerSelection());
-              }
+              loadNewPair();
+            } else {
+              if (selectionContainer)
+                selectionContainer.style.display = "block";
+              if (comparisonArea)
+                comparisonArea.style.display = "none";
+              if (actionsEl)
+                actionsEl.style.display = "none";
+              Promise.resolve().then(() => (init_gauntlet_selection(), gauntlet_selection_exports)).then((m) => m.loadPerformerSelection());
             }
-          } catch (error) {
-            setErrorMessage(`Failed to switch to ${newMode} mode`);
-            console.error(`[Ascension] Mode switch error (${newMode}):`, error);
           }
         };
-        btn.addEventListener("click", debounce2(handler, 500));
+        btn.addEventListener("click", handler);
         attachedSet.add(key);
       }
     });
@@ -5041,18 +4829,7 @@ Match Stats:`;
     genderBtns.forEach((btn) => {
       btn.classList.toggle("active", !isSelected);
     });
-    setLoadingMessage("Refreshing matchups...");
-    loadNewPair().then(() => {
-      setTimeout(() => {
-        const comparisonArea = document.getElementById("hon-comparison-area");
-        if (comparisonArea) {
-          ensureElementVisible(comparisonArea, 80);
-        }
-      }, 300);
-    }).catch((err) => {
-      setErrorMessage("Failed to refresh matchups");
-      console.error("[Ascension] Gender toggle error:", err);
-    });
+    loadNewPair();
   }
   function setMode(mode) {
     const selEl = document.getElementById("hon-performer-selection");
