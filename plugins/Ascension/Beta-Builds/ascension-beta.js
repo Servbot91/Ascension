@@ -832,9 +832,12 @@
     if (performer.custom_fields.hotornot_stats) {
       try {
         const stats = JSON.parse(performer.custom_fields.hotornot_stats);
+        if (stats.performer_record) {
+          delete stats.performer_record;
+        }
         return { ...defaultStats, ...stats };
       } catch (e) {
-        console.warn(`[HotOrNot] Failed to parse stats for ${performer.id}`);
+        console.warn(`[Ascension] Failed to parse stats for ${performer.id}`);
       }
     }
     const eloMatches = parseInt(performer.custom_fields.elo_matches, 10);
@@ -1363,7 +1366,9 @@
         const currentStats = parsePerformerEloData(performerObj);
         const updatedStats = updatePerformerStats(currentStats, won);
         if (updatedStats) {
-          variables.fields.hotornot_stats = JSON.stringify(updatedStats);
+          const statsToStore = { ...updatedStats };
+          delete statsToStore.performer_record;
+          variables.fields.hotornot_stats = JSON.stringify(statsToStore);
         }
       } catch (e) {
         console.error(`[Ascension] Stats update failed for ${id}:`, e);
@@ -1464,7 +1469,9 @@
     if (state.battleType === "performers") {
       const fields = {};
       if (statsObj) {
-        fields.hotornot_stats = JSON.stringify(statsObj);
+        const statsToRestore = { ...statsObj };
+        delete statsToRestore.performer_record;
+        fields.hotornot_stats = JSON.stringify(statsToRestore);
         if ("performer_record" in statsObj) {
           const recordData = statsObj.performer_record;
           console.log(`[Ascension] Restoring performer_record for ${itemId}:`, recordData);
