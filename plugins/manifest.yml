@@ -2,7 +2,7 @@
   name: Ascension
   metadata:
     description: The Sakoto fork of the HotorNot plugin which adds a tier based rating system for performers and images. Features include real time dynamic and scaling matchmaking system, leaderboards, metrics, better ui, and better mobile integration.
-  version: 1.073f5861
-  date: 2026-05-12 14:10:30
+  version: 1.004f0369
+  date: 2026-05-12 15:44:49
   path: https://github.com/Servbot91/Ascension/raw/refs/heads/main/plugins/Ascension.zip
-  sha256: 44cfab1a3895ff4c47ee5ad30d716eb0359292f43f6e18e779fb5e5c75b1203c
+  sha256: d413886b7d368ab68de8ddd7234dc09d657641be7b3729812c357ef097a228a5
