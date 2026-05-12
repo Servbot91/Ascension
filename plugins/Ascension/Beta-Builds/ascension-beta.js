@@ -3214,14 +3214,19 @@ Match Stats:`;
       };
       return tierValues[b] - tierValues[a];
     });
-    const tierGroupsHTML = sortedTiers.map((tier) => {
-      const performersInTier = tierGroups[tier];
-      const tierColor = getTierColor(tier);
-      const rows = performersInTier.map((p) => {
+    const allTiersGroup = {
+      "All Tiers": processedPerformers
+    };
+    const allGroups = { ...allTiersGroup, ...tierGroups };
+    const groupHTML = Object.keys(allGroups).map((groupName) => {
+      const performersInGroup = allGroups[groupName];
+      const isAllTiers = groupName === "All Tiers";
+      const groupColor = isAllTiers ? "#ffffff" : getTierColor(groupName);
+      const rows = performersInGroup.map((p) => {
         const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
         const streakDisplay = p.current_streak > 0 ? `<span class="hon-stats-positive">+${p.current_streak}</span>` : p.current_streak < 0 ? `<span class="hon-stats-negative">${p.current_streak}</span>` : "0";
         const flag = getFlagEmoji(p.countryCode);
-        const countryCodeDisplay = p.countryCode || "N/A\u2690";
+        const countryCodeDisplay = p.countryCode || "N/A";
         const genderEmoji = getGenderEmoji(p.gender);
         const maxWeight = 1e3;
         const rechargeRate = 1e3 / 12;
@@ -3249,7 +3254,14 @@ Match Stats:`;
           rechargeRate
         });
         const countdownFormatted = formatCountdown(timeUntilFull);
-        const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus} ${weightFormatted}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}">${countdownFormatted}</small>`;
+        const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}" style="font-size: 0.7em;">${countdownFormatted || weightFormatted}</small>`;
+        let ratingColor = groupColor;
+        if (!isAllTiers) {
+          const isUnrated = p.rating === "Unrated";
+          const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
+          const tier = getRatingTier(numericRating);
+          ratingColor = getTierColor(tier);
+        }
         return `
         <tr data-rank="${p.rank}" 
             data-rating="${p.rating}" 
@@ -3272,7 +3284,7 @@ Match Stats:`;
           <td class="hon-stats-name">
             <a href="/performers/${p.id}" target="_blank">${escapeHtml(p.name)}</a>
           </td>
-          <td class="hon-stats-rating" style="color: ${tierColor}; font-weight: bold;">
+          <td class="hon-stats-rating" style="color: ${ratingColor}; font-weight: bold;">
             ${p.rating}
           </td>
           <td>${p.total_matches}</td>
@@ -3288,13 +3300,13 @@ Match Stats:`;
       }).join("");
       return `
       <div class="hon-rank-group">
-        <div class="hon-rank-group-header" data-group="${tier}" role="button">
+        <div class="hon-rank-group-header" data-group="${groupName.toLowerCase().replace(/\s+/g, "-")}" role="button">
           <span class="hon-group-toggle">\u25B6</span>
-          <span class="hon-rank-group-title" style="color: ${tierColor}; font-weight: bold;">
-            ${tier} Performers (${performersInTier.length})
+          <span class="hon-rank-group-title" style="color: ${groupColor}; font-weight: bold;">
+            ${groupName} (${performersInGroup.length})
           </span>
         </div>
-        <div class="hon-rank-group-content collapsed" data-group="${tier}">
+        <div class="hon-rank-group-content collapsed" data-group="${groupName.toLowerCase().replace(/\s+/g, "-")}">
           <table class="hon-stats-table">
             <thead>
               <tr>
@@ -3319,112 +3331,7 @@ Match Stats:`;
         </div>
       </div>`;
     }).join("");
-    const allTiersRows = processedPerformers.map((p) => {
-      const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
-      const streakDisplay = p.current_streak > 0 ? `<span class="hon-stats-positive">+${p.current_streak}</span>` : p.current_streak < 0 ? `<span class="hon-stats-negative">${p.current_streak}</span>` : "0";
-      const flag = getFlagEmoji(p.countryCode);
-      const countryCodeDisplay = p.countryCode || "N/A\u2690";
-      const genderEmoji = getGenderEmoji(p.gender);
-      const maxWeight = 1e3;
-      const rechargeRate = 1e3 / 12;
-      let currentWeight = maxWeight;
-      if (p.last_match) {
-        const lastMatchDate = new Date(p.last_match);
-        const msSince = Date.now() - lastMatchDate.getTime();
-        const hoursSince = msSince / (1e3 * 60 * 60);
-        const recovered = hoursSince * rechargeRate;
-        currentWeight = Math.min(maxWeight, recovered);
-      }
-      const weightFormatted = formatWeight(currentWeight);
-      let weightStatus;
-      if (currentWeight >= maxWeight) {
-        weightStatus = "\u{1F50B}";
-      } else if (currentWeight <= 0) {
-        weightStatus = "\u{1FAAB}";
-      } else {
-        weightStatus = "\u{1FAAB}";
-      }
-      const timeUntilFull = calculateTimeUntilFull({
-        ...p,
-        weight: currentWeight,
-        maxWeight,
-        rechargeRate
-      });
-      const countdownFormatted = formatCountdown(timeUntilFull);
-      const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus} ${weightFormatted}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}">${countdownFormatted}</small>`;
-      const isUnrated = p.rating === "Unrated";
-      const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
-      const tier = getRatingTier(numericRating);
-      const tierColor = getTierColor(tier);
-      return `
-      <tr data-rank="${p.rank}" 
-          data-rating="${p.rating}" 
-          data-raw-rating="${p.rawRating || 1}"
-          data-matches="${p.total_matches}" 
-          data-wins="${p.wins}" 
-          data-losses="${p.losses}" 
-          data-draws="${p.draws || 0}" 
-          data-winrate="${winRate}" 
-          data-streak="${p.current_streak}" 
-          data-beststreak="${p.best_streak}" 
-          data-worststreak="${p.worst_streak}"
-          data-country="${countryCodeDisplay}"
-          data-gender="${p.gender}"
-          data-weight="${currentWeight}"
-          data-maxweight="${maxWeight}">
-        <td class="hon-stats-rank">#${p.rank}</td>
-        <td class="hon-stats-country">${flag} ${countryCodeDisplay}</td>
-        <td class="hon-stats-gender">${genderEmoji}</td>
-        <td class="hon-stats-name">
-          <a href="/performers/${p.id}" target="_blank">${escapeHtml(p.name)}</a>
-        </td>
-        <td class="hon-stats-rating" style="color: ${tierColor}; font-weight: bold;">
-          ${p.rating}
-        </td>
-        <td>${p.total_matches}</td>
-        <td class="hon-stats-positive">${p.wins}</td>
-        <td class="hon-stats-negative">${p.losses}</td>
-        <td>${p.draws || 0}</td>
-        <td>${winRate}%</td>
-        <td>${streakDisplay}</td>
-        <td class="hon-stats-positive">${formatBestStreakDisplay(p.best_streak)}</td>
-        <td class="hon-stats-negative">${p.worst_streak}</td>
-        <td class="hon-stats-weight">${weightDisplay}</td>
-      </tr>`;
-    }).join("");
-    const allTiersOption = `
-    <div class="hon-rank-group">
-      <div class="hon-rank-group-header" data-group="all-tiers" role="button">
-        <span class="hon-group-toggle">\u25B6</span>
-        <span class="hon-rank-group-title" style="color: #ffffff; font-weight: bold;">
-          All Tiers (${processedPerformers.length})
-        </span>
-      </div>
-      <div class="hon-rank-group-content collapsed" data-group="all-tiers">
-        <table class="hon-stats-table">
-          <thead>
-            <tr>
-              <th data-sort="rank">Rank</th>
-              <th data-sort="country">Country</th>
-              <th data-sort="gender">Gender</th>
-              <th data-sort="name">Name</th>
-              <th data-sort="rating">Rating</th>
-              <th data-sort="matches">Matches</th>
-              <th data-sort="wins">W</th>
-              <th data-sort="losses">L</th>
-              <th data-sort="draws">D</th>
-              <th data-sort="winrate">%</th>
-              <th data-sort="streak">Streak</th>
-              <th data-sort="beststreak">Best</th>
-              <th data-sort="worststreak">Worst</th>
-              <th data-sort="weight">\u231B</th>
-            </tr>
-          </thead>
-          <tbody>${allTiersRows}</tbody>
-        </table>
-      </div>
-    </div>`;
-    return allTiersOption + tierGroupsHTML;
+    return groupHTML;
   }
   function initStatsSorting(dialog) {
     const headers = dialog.querySelectorAll(".hon-stats-table th[data-sort]");

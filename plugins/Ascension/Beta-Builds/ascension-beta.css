@@ -2943,6 +2943,61 @@
   }
 }
 
+.hon-stats-table {
+  table-layout: auto;
+  width: 90%;
+  display: table;
+}
+
+.hon-stats-table th,
+.hon-stats-table td {
+  padding: 4px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+}
+
+.hon-stats-weight small.countdown {
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+#hon-stats-modal .hon-stats-modal-dialog {
+  max-width: 65%;
+  width: 65%;
+}
+
+.hon-stats-content {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Hide scrollbar but keep functionality */
+.hon-stats-content::-webkit-scrollbar {
+  height: 6px;
+}
+
+.hon-stats-content::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.hon-stats-content::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+
+#hon-stats-modal .hon-stats-modal-dialog {
+  max-width: 95%;
+  width: 95%;
+}
+
+}
+
 /* === mode-selection.css === */
 .hon-mode-toggle {
   display: flex;
