@@ -2777,7 +2777,7 @@ Match Stats:`;
       );
       if (crossTierCandidates.length > 0) {
         const weights = crossTierCandidates.map((candidate) => candidate.weight);
-        const challengerItem = weightedRandomSelectOptimized(crossTierCandidates, weights);
+        const challengerItem = weightedRandomSelect(crossTierCandidates, weights);
         if (challengerItem && canBattleByTier(tier1, getRatingTier(challengerItem.p.rating100 || 0))) {
           logMatch("CROSS-TIER", seed.p, challengerItem.p, seed.weight, challengerItem.weight, "#E91E63");
           const rank1 = getPerformerRankInList(seed.p, performers);
