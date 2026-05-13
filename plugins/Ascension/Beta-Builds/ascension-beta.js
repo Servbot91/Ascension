@@ -737,6 +737,24 @@
   });
 
   // math-utils.js
+  var math_utils_exports = {};
+  __export(math_utils_exports, {
+    calculateAverageMatches: () => calculateAverageMatches,
+    calculateMatchOutcome: () => calculateMatchOutcome,
+    calculateWeightsBatch: () => calculateWeightsBatch,
+    clearPerformerRecencyCache: () => clearPerformerRecencyCache,
+    clearRecencyWeightCache: () => clearRecencyWeightCache,
+    debugRecencyWeights: () => debugRecencyWeights,
+    getLowMatchBoost: () => getLowMatchBoost,
+    getProgressiveKFactor: () => getProgressiveKFactor,
+    getRecencyWeight: () => getRecencyWeight,
+    getUnderdogMultiplier: () => getUnderdogMultiplier,
+    isActiveParticipant: () => isActiveParticipant,
+    parsePerformerEloData: () => parsePerformerEloData,
+    selectRandomOpponent: () => selectRandomOpponent,
+    updatePerformerStats: () => updatePerformerStats,
+    weightedRandomSelect: () => weightedRandomSelect
+  });
   function getLowMatchBoost(performer, avgMatches) {
     const stats = parsePerformerEloData(performer);
     const matches = stats.total_matches || 0;
@@ -759,6 +777,13 @@
       return sum + (stats.total_matches || 0);
     }, 0);
     return totalMatches / performers.length;
+  }
+  function clearPerformerRecencyCache(performerId) {
+    for (const key of recencyWeightCache.keys()) {
+      if (key.startsWith(`${performerId}-`)) {
+        recencyWeightCache.delete(key);
+      }
+    }
   }
   function getRecencyWeight(performer) {
     const cacheKey = `${performer.id}-${performer.last_match || "null"}`;
@@ -792,6 +817,49 @@
     recencyWeightCache.set(cacheKey, { value: freshness, timestamp: now });
     return freshness;
   }
+  function clearRecencyWeightCache() {
+    recencyWeightCache.clear();
+  }
+  function debugRecencyWeights(performers, limit = 10) {
+    if (typeof DEBUG === "undefined" || !DEBUG)
+      return;
+    console.group("[HotOrNot] Recency Weight Debug Info");
+    const weights = performers.slice(0, limit).map((p) => ({
+      name: p.name || `Performer #${p.id}`,
+      id: p.id,
+      weight: getRecencyWeight(p),
+      last_match: parsePerformerEloData(p).last_match,
+      total_matches: parsePerformerEloData(p).total_matches || 0
+    })).sort((a, b) => b.weight - a.weight);
+    console.table(weights);
+    console.groupEnd();
+  }
+  function calculateWeightsBatch(performers, avgMatches) {
+    const weights = [];
+    const cache = /* @__PURE__ */ new Map();
+    for (const p of performers) {
+      const cacheKey = `${p.id}-${p.last_match || "null"}`;
+      if (cache.has(cacheKey)) {
+        weights.push(cache.get(cacheKey));
+        continue;
+      }
+      const stats = parsePerformerEloData(p);
+      const rawMatches = stats.total_matches || 0;
+      const cappedMatches = Math.min(rawMatches, 10);
+      const baseWeight = Math.pow(getRecencyWeight(p), 3) + Math.random() * 0.01;
+      const lowMatchBoost = getLowMatchBoost({ ...p, total_matches: cappedMatches }, avgMatches);
+      const finalWeight = baseWeight * lowMatchBoost;
+      const weightData = {
+        p,
+        weight: finalWeight,
+        rating: p.rating100 || 1,
+        matches: rawMatches
+      };
+      cache.set(cacheKey, weightData);
+      weights.push(weightData);
+    }
+    return weights;
+  }
   function weightedRandomSelect(items, weights) {
     if (!items?.length || items.length !== weights?.length)
       return null;
@@ -815,6 +883,12 @@
       }
     }
     return items[low];
+  }
+  function selectRandomOpponent(remainingOpponents, maxChoices = 3) {
+    if (remainingOpponents.length === 0)
+      return null;
+    const closestOpponents = remainingOpponents.slice(-maxChoices);
+    return closestOpponents[Math.floor(Math.random() * closestOpponents.length)];
   }
   function parsePerformerEloData(performer) {
     const defaultStats = {
@@ -1316,6 +1390,14 @@
       console.error("[Ascension] Cannot update performer: ID is missing");
       return;
     }
+    try {
+      const mathUtils = await Promise.resolve().then(() => (init_math_utils(), math_utils_exports));
+      if (mathUtils.clearPerformerRecencyCache) {
+        mathUtils.clearPerformerRecencyCache(id);
+      }
+    } catch (e) {
+      console.debug(`[Ascension] Could not clear recency cache for performer ${id}`);
+    }
     let performerName = "Unknown";
     if (performerObj?.name) {
       performerName = performerObj.name;
@@ -1467,6 +1549,14 @@
   }
   async function updateItemRatingDirect(itemId, rating, statsObj) {
     if (state.battleType === "performers") {
+      try {
+        const mathUtils = await Promise.resolve().then(() => (init_math_utils(), math_utils_exports));
+        if (mathUtils.clearPerformerRecencyCache) {
+          mathUtils.clearPerformerRecencyCache(itemId);
+        }
+      } catch (e) {
+        console.debug(`[Ascension] Could not clear recency cache for performer ${itemId}`);
+      }
       const fields = {};
       if (statsObj) {
         const statsToRestore = { ...statsObj };
