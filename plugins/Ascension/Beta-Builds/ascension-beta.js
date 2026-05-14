@@ -2865,8 +2865,8 @@ Match Stats:`;
       return { items: await fetchRandomPerformers(2), ranks: [null, null] };
     }
     const topEligible = eligiblePerformers.slice(0, Math.min(eligiblePerformers.length, 15));
-    const seedWeights = topEligible.map((item) => item.weight);
-    const seed = weightedRandomSelect(topEligible, seedWeights) || topEligible[0];
+    const seedIndex = Math.floor(Math.random() * topEligible.length);
+    const seed = topEligible[seedIndex];
     const tier1 = getRatingTier(seed.rating);
     if (shouldForceCrossTierMatch()) {
       const crossTierCandidates = eligiblePerformers.filter(
