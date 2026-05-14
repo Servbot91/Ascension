@@ -2725,6 +2725,16 @@ Match Stats:`;
   function shouldForceCrossTierMatch() {
     return Math.random() < 0.1;
   }
+  function getCrossTierOpponent(allPerformers, targetPerformer, eligiblePerformers) {
+    const targetRating = targetPerformer.rating100 || 1;
+    const crossTierCandidates = eligiblePerformers.filter(
+      (item) => item.p.id !== targetPerformer.id && (item.p.rating100 || 1) >= targetRating + 20
+    );
+    if (crossTierCandidates.length >= 10) {
+      return crossTierCandidates[Math.floor(Math.random() * crossTierCandidates.length)].p;
+    }
+    return null;
+  }
   function attachVictoryHandlers(area) {
     const btn = area.querySelector("#hon-new-gauntlet");
     if (btn) {
@@ -2869,18 +2879,19 @@ Match Stats:`;
     const seed = topEligible[seedIndex];
     const tier1 = getRatingTier(seed.rating);
     if (shouldForceCrossTierMatch()) {
-      const crossTierCandidates = eligiblePerformers.filter(
-        (item) => item.p.id !== seed.p.id && (item.p.rating100 || 1) >= (seed.p.rating100 || 1) + 20
-      );
-      if (crossTierCandidates.length > 0) {
-        const weights = crossTierCandidates.map((candidate) => candidate.weight);
-        const challengerItem = weightedRandomSelect(crossTierCandidates, weights);
-        if (challengerItem && canBattleByTier(tier1, getRatingTier(challengerItem.p.rating100 || 0))) {
-          logMatch("CROSS-TIER", seed.p, challengerItem.p, seed.weight, challengerItem.weight, "#E91E63");
-          const rank1 = getPerformerRankInList(seed.p, performers);
-          const rank2 = getPerformerRankInList(challengerItem.p, performers);
-          return { items: [seed.p, challengerItem.p], ranks: [rank1, rank2] };
-        }
+      const crossTierOpponent = getCrossTierOpponent(performers, seed.p, eligiblePerformers);
+      if (crossTierOpponent && canBattleByTier(tier1, getRatingTier(crossTierOpponent.rating100 || 0))) {
+        logMatch(
+          "CROSS-TIER",
+          seed.p,
+          crossTierOpponent,
+          seed.weight,
+          eligiblePerformers.find((item) => item.p.id === crossTierOpponent.id)?.weight || 0,
+          "#E91E63"
+        );
+        const rank1 = getPerformerRankInList(seed.p, performers);
+        const rank2 = getPerformerRankInList(crossTierOpponent, performers);
+        return { items: [seed.p, crossTierOpponent], ranks: [rank1, rank2] };
       }
     }
     const validOpponents = eligiblePerformers.filter((item) => {
