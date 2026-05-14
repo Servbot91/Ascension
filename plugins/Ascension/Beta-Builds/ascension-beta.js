@@ -2862,10 +2862,11 @@ Match Stats:`;
         weightMap.set(cacheKey, weightData);
       }
       const stats = parsePerformerEloData(weightData.p);
+      const isBlacklisted = weightData.weight === 0;
       const isUnrated = stats.total_matches === 0;
       const isHighWeight = weightData.weight > 0.01;
       const isUndermatched = weightData.matches > 0 && weightData.matches < avgMatches * 0.2;
-      if (isUnrated || isHighWeight || isUndermatched) {
+      if (!isBlacklisted && (isUnrated || isHighWeight || isUndermatched)) {
         eligiblePerformers.push(weightData);
       }
     }
@@ -2875,8 +2876,13 @@ Match Stats:`;
       return { items: await fetchRandomPerformers(2), ranks: [null, null] };
     }
     const topEligible = eligiblePerformers.slice(0, Math.min(eligiblePerformers.length, 15));
-    const seedIndex = Math.floor(Math.random() * topEligible.length);
-    const seed = topEligible[seedIndex];
+    if (topEligible.length === 0) {
+      console.warn("[Ascension] No eligible performers for seed selection.");
+      return { items: await fetchRandomPerformers(2), ranks: [null, null] };
+    }
+    const seedWeights = topEligible.map((item) => Math.max(0.01, item.weight));
+    const seedItem = weightedRandomSelect(topEligible, seedWeights);
+    const seed = seedItem || topEligible[0];
     const tier1 = getRatingTier(seed.rating);
     if (shouldForceCrossTierMatch()) {
       const crossTierOpponent = getCrossTierOpponent(performers, seed.p, eligiblePerformers);
@@ -2902,16 +2908,22 @@ Match Stats:`;
         return false;
       if (!canBattleByTier(tier1, getRatingTier(item.rating)))
         return false;
+      if (item.weight === 0)
+        return false;
       return true;
     });
     if (validOpponents.length > 0) {
-      const weights = validOpponents.map((opponent) => opponent.weight);
-      const opponentItem = weightedRandomSelect(validOpponents, weights);
-      if (opponentItem) {
-        logMatch("RANGE-VALID", seed.p, opponentItem.p, seed.weight, opponentItem.weight, "#2196F3");
-        const rank1 = getPerformerRankInList(seed.p, performers);
-        const rank2 = getPerformerRankInList(opponentItem.p, performers);
-        return { items: [seed.p, opponentItem.p], ranks: [rank1, rank2] };
+      const viableOpponents = validOpponents.filter((opponent) => opponent.weight > 0.05);
+      const opponentsToUse = viableOpponents.length > 0 ? viableOpponents : validOpponents;
+      if (opponentsToUse.length > 0) {
+        const weights = opponentsToUse.map((opponent) => Math.max(0.01, opponent.weight));
+        const opponentItem = weightedRandomSelect(opponentsToUse, weights);
+        if (opponentItem) {
+          logMatch("RANGE-VALID", seed.p, opponentItem.p, seed.weight, opponentItem.weight, "#2196F3");
+          const rank1 = getPerformerRankInList(seed.p, performers);
+          const rank2 = getPerformerRankInList(opponentItem.p, performers);
+          return { items: [seed.p, opponentItem.p], ranks: [rank1, rank2] };
+        }
       }
     }
     const looseRangeOpponents = eligiblePerformers.filter(
