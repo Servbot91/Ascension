@@ -810,10 +810,6 @@
     }
     const hoursSince = minutesSince / 60;
     let freshness = Math.min(1, 0.1 + hoursSince * 0.075);
-    const matches = stats.total_matches || 0;
-    if (matches < 10) {
-      freshness = Math.min(1, freshness + 0.2);
-    }
     recencyWeightCache.set(cacheKey, { value: freshness, timestamp: now });
     return freshness;
   }
