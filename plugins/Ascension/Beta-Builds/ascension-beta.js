@@ -9,7 +9,332 @@
       __defProp(target, name, { get: all[name], enumerable: true });
   };
 
+  // math-utils.js
+  function parsePerformerEloData(performer) {
+    const defaultStats = {
+      total_matches: 0,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      current_streak: 0,
+      best_streak: 0,
+      worst_streak: 0,
+      last_match: null
+    };
+    if (!performer?.custom_fields)
+      return defaultStats;
+    if (performer.custom_fields.hotornot_stats) {
+      try {
+        const stats = JSON.parse(performer.custom_fields.hotornot_stats);
+        if (stats.performer_record) {
+          delete stats.performer_record;
+        }
+        return { ...defaultStats, ...stats };
+      } catch (e) {
+        console.warn(`[Ascension] Failed to parse stats for ${performer.id}`);
+      }
+    }
+    const eloMatches = parseInt(performer.custom_fields.elo_matches, 10);
+    if (!isNaN(eloMatches))
+      return { ...defaultStats, total_matches: eloMatches };
+    return defaultStats;
+  }
+  function getLowMatchBoost(performer, avgMatches) {
+    const stats = parsePerformerEloData(performer);
+    const matches = stats.total_matches || 0;
+    if (matches === 0) {
+      return 2;
+    }
+    if (avgMatches > 5 && matches < avgMatches * 0.3) {
+      return 1.5;
+    }
+    if (avgMatches > 10 && matches < avgMatches * 0.5) {
+      return 1.2;
+    }
+    return 1;
+  }
+  function calculateAverageMatches(performers) {
+    if (!performers || performers.length === 0)
+      return 0;
+    const totalMatches = performers.reduce((sum, p) => {
+      const stats = parsePerformerEloData(p);
+      return sum + (stats.total_matches || 0);
+    }, 0);
+    return totalMatches / performers.length;
+  }
+  function getRecencyWeight(performer) {
+    const cacheKey = `${performer.id}-${performer.last_match || "null"}-${performer.rating100 || 1}-${parsePerformerEloData(performer).total_matches || 0}`;
+    const now = Date.now();
+    if (recencyWeightCache.has(cacheKey)) {
+      const cached = recencyWeightCache.get(cacheKey);
+      if (now - cached.timestamp < CACHE_TTL) {
+        return cached.value;
+      }
+    }
+    const stats = parsePerformerEloData(performer);
+    if (!stats.last_match || stats.total_matches === 0) {
+      const result = 1;
+      recencyWeightCache.set(cacheKey, { value: result, timestamp: now });
+      return result;
+    }
+    const lastMatchDate = new Date(stats.last_match);
+    const msSince = now - lastMatchDate.getTime();
+    const minutesSince = msSince / (1e3 * 60);
+    if (minutesSince < 30) {
+      const result = 0;
+      recencyWeightCache.set(cacheKey, { value: result, timestamp: now });
+      return result;
+    }
+    const hoursSince = minutesSince / 60;
+    let freshness = Math.min(1, 0.1 + hoursSince * 0.075);
+    const matches = stats.total_matches || 0;
+    if (matches < 10) {
+      freshness = Math.min(1, freshness + 0.2);
+    }
+    recencyWeightCache.set(cacheKey, { value: freshness, timestamp: now });
+    return freshness;
+  }
+  function weightedRandomSelect(items, weights) {
+    if (!items?.length || items.length !== weights?.length)
+      return null;
+    const cumulativeWeights = [];
+    let sum = 0;
+    for (let i = 0; i < weights.length; i++) {
+      sum += weights[i];
+      cumulativeWeights.push(sum);
+    }
+    if (sum <= 0)
+      return items[Math.floor(Math.random() * items.length)];
+    const random = Math.random() * sum;
+    let low = 0;
+    let high = cumulativeWeights.length - 1;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (cumulativeWeights[mid] < random) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    return items[low];
+  }
+  function updatePerformerStats(currentStats, won) {
+    const newStats = {
+      ...currentStats,
+      total_matches: (currentStats.total_matches || 0) + 1,
+      last_match: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    delete newStats.history;
+    if (won === null) {
+      newStats.draws = (currentStats.draws || 0) + 1;
+      return newStats;
+    }
+    newStats.wins = won ? (currentStats.wins || 0) + 1 : currentStats.wins || 0;
+    newStats.losses = won ? currentStats.losses || 0 : (currentStats.losses || 0) + 1;
+    newStats.current_streak = won ? currentStats.current_streak >= 0 ? (currentStats.current_streak || 0) + 1 : 1 : currentStats.current_streak <= 0 ? (currentStats.current_streak || 0) - 1 : -1;
+    newStats.best_streak = Math.max(currentStats.best_streak || 0, newStats.current_streak);
+    newStats.worst_streak = Math.min(currentStats.worst_streak || 0, newStats.current_streak);
+    return newStats;
+  }
+  function getUnderdogMultiplier(rating, opponentRating) {
+    const ratingDiff = opponentRating - rating;
+    if (ratingDiff > 30)
+      return 1.5;
+    if (ratingDiff > 20)
+      return 1.3;
+    if (ratingDiff > 10)
+      return 1.1;
+    return 1;
+  }
+  function calculateMatchOutcome({
+    winnerRating,
+    loserRating,
+    mode,
+    winnerMatchCount,
+    loserMatchCount,
+    winnerStats = {},
+    loserStats = {},
+    isSpecialChallenge = false
+  }) {
+    const ratingDiff = loserRating - winnerRating;
+    const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 400));
+    const winnerK = getProgressiveKFactor(winnerRating, null, winnerMatchCount, mode);
+    const loserK = getProgressiveKFactor(loserRating, null, loserMatchCount, mode);
+    const winnerUnderdogMult = getUnderdogMultiplier(winnerRating, loserRating);
+    let lossProtection = isSpecialChallenge ? 0.1 : getChallengeProtectionMultiplier(loserRating, winnerRating);
+    let winnerGain = Math.round(winnerK * (1 - expectedWinner) * winnerUnderdogMult);
+    let loserLoss = Math.round(loserK * expectedWinner * lossProtection);
+    if (mode === "gauntlet") {
+      const currentStreak = winnerStats.current_streak || 0;
+      if (currentStreak >= 3) {
+        const gauntletDampener = Math.max(0.3, 1 - (currentStreak - 3) * 0.15);
+        winnerGain = Math.ceil(winnerGain * gauntletDampener);
+      }
+    }
+    if (mode === "champion") {
+      const winStreak = winnerStats.current_streak || 0;
+      if (winStreak >= 5) {
+        const streakPenalty = winStreak >= 10 ? 0.4 : 0.7;
+        winnerGain = Math.ceil(winnerGain * streakPenalty);
+      }
+    }
+    if (winnerRating >= 85) {
+      winnerGain = Math.ceil(winnerGain * 0.6);
+    } else if (winnerRating >= 70) {
+      winnerGain = Math.ceil(winnerGain * 0.8);
+    }
+    if (winnerRating < loserRating - 20) {
+      const ratingDiff2 = loserRating - winnerRating;
+      const scaleFactor = Math.max(0.3, 1 - (ratingDiff2 - 20) / 100);
+      winnerGain = Math.ceil(winnerGain * scaleFactor);
+      loserLoss = Math.ceil(loserLoss * scaleFactor);
+      loserLoss = Math.min(loserLoss, 5);
+    }
+    if (loserRating < winnerRating - 15) {
+      const gap = winnerRating - loserRating;
+      const mitigationFactor = Math.max(0.2, 1 - gap / 45);
+      loserLoss = Math.ceil(loserLoss * mitigationFactor);
+      if (gap > 25) {
+        loserLoss = Math.min(loserLoss, 3);
+      }
+    }
+    return {
+      winnerGain: Math.max(1, winnerGain),
+      loserLoss: Math.max(0, loserLoss)
+    };
+  }
+  function getProgressiveKFactor(rating, opponentRating, matchCount, mode = "swiss") {
+    const count = matchCount || 0;
+    const experienceFactor = 0.5 + 0.5 / (1 + Math.exp((count - 18) / 6));
+    let baseK = 32 * experienceFactor;
+    if (rating > 60) {
+      const reductionFactor = Math.max(0.5, 1 - (rating - 60) / 70);
+      baseK *= reductionFactor;
+    }
+    if (mode === "champion") {
+      let kFactor = Math.round(baseK * 0.85);
+      return Math.min(35, Math.max(6, kFactor));
+    } else if (mode === "gauntlet") {
+      let kFactor = Math.round(baseK * 1.1);
+      return Math.min(45, Math.max(8, kFactor));
+    }
+    return Math.min(40, Math.max(6, Math.round(baseK)));
+  }
+  function getChallengeProtectionMultiplier(rating, opponentRating) {
+    const ratingDiff = opponentRating - rating;
+    if (ratingDiff > 15) {
+      if (ratingDiff > 30) {
+        return 0.7;
+      } else if (ratingDiff > 25) {
+        return 0.8;
+      } else if (ratingDiff > 20) {
+        return 0.85;
+      } else {
+        return 0.9;
+      }
+    }
+    return 1;
+  }
+  var recencyWeightCache, CACHE_TTL;
+  var init_math_utils = __esm({
+    "math-utils.js"() {
+      recencyWeightCache = /* @__PURE__ */ new Map();
+      CACHE_TTL = 30 * 60 * 1e3;
+    }
+  });
+
+  // rating-utils.js
+  function getRatingTier(rating) {
+    if (rating >= 85)
+      return "S-Tier";
+    if (rating >= 70)
+      return "A-Tier";
+    if (rating >= 55)
+      return "B-Tier";
+    if (rating >= 40)
+      return "C-Tier";
+    if (rating >= 25)
+      return "D-Tier";
+    return "F-Tier";
+  }
+  function getTierColor(tier) {
+    switch (tier) {
+      case "S-Tier":
+        return "#eb9834";
+      case "A-Tier":
+        return "#e014aa";
+      case "B-Tier":
+        return "#7f1e82";
+      case "C-Tier":
+        return "#14bbe0";
+      case "D-Tier":
+        return "#92e014";
+      case "F-Tier":
+        return "#808080";
+      default:
+        return "#000000";
+    }
+  }
+  async function getPerformerGlobalRank(performerId, allPerformers) {
+    try {
+      if (!performerId || !allPerformers || allPerformers.length === 0) {
+        return null;
+      }
+      const targetPerformer = allPerformers.find((p) => p.id === performerId);
+      if (!targetPerformer) {
+        return null;
+      }
+      const currentRating = targetPerformer.rating100 ?? 1;
+      const ratedPerformers = allPerformers.filter((p) => {
+        if (p.rating100 !== null && p.rating100 > 1)
+          return true;
+        const statsJson2 = p.custom_fields?.["hotornot_stats"];
+        if (statsJson2) {
+          try {
+            const stats2 = typeof statsJson2 === "string" ? JSON.parse(statsJson2) : statsJson2;
+            return stats2.total_matches > 0;
+          } catch (e) {
+            return false;
+          }
+        }
+        return false;
+      });
+      const higherRatedCount = ratedPerformers.filter((p) => (p.rating100 ?? 1) > currentRating).length;
+      const rank = higherRatedCount + 1;
+      let stats = null;
+      const statsJson = targetPerformer.custom_fields?.["hotornot_stats"];
+      if (statsJson) {
+        try {
+          stats = typeof statsJson === "string" ? JSON.parse(statsJson) : statsJson;
+        } catch (e) {
+          console.warn(`[Ascension] Failed to parse stats for performer ${performerId}:`, e);
+        }
+      }
+      return {
+        rank,
+        total: ratedPerformers.length,
+        rating: currentRating,
+        stats
+      };
+    } catch (err) {
+      console.error("[Ascension] Error calculating global rank:", err);
+      return null;
+    }
+  }
+  var init_rating_utils = __esm({
+    "rating-utils.js"() {
+    }
+  });
+
   // state.js
+  function shuffleArray(array) {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }
   function resetBattleState() {
     state.gauntletChampion = null;
     state.gauntletWins = 0;
@@ -19,10 +344,24 @@
     state.gauntletChampionRank = 0;
     state.matchHistory = [];
     state.skippedId = null;
+    state.sessionMatchCounts = {};
+    state.recentlySelectedPerformers = [];
+  }
+  function getNewcomerBoost(performer) {
+    const stats = parsePerformerEloData(performer);
+    if (stats.total_matches === 0)
+      return 3;
+    if (stats.total_matches < 5)
+      return 2;
+    if (stats.total_matches < 15)
+      return 1.5;
+    return 1;
   }
   var state;
   var init_state = __esm({
     "state.js"() {
+      init_math_utils();
+      init_rating_utils();
       state = {
         // Current Matchup Info
         currentPair: { left: null, right: null },
@@ -56,6 +395,14 @@
         skippedId: null
         // Keep for backward compatibility but deprecate
       };
+      state.tierRotation = state.tierRotation || {
+        currentFocus: null,
+        cycle: shuffleArray(["any", "S-Tier", "A-Tier", "B-Tier", "C-Tier", "D-Tier", "F-Tier", "newcomers"]),
+        currentIndex: 0,
+        sessionMatches: 0,
+        lastSeen: {},
+        matchCount: 0
+      };
     }
   });
 
@@ -78,7 +425,7 @@
     const emoji = getStreakEmoji(winCount);
     if (!emoji)
       return "";
-    return `${emoji} ${winCount} win${winCount > 1 ? "s" : ""}`;
+    return `${emoji} ${winCount}`;
   }
   var ALL_GENDERS, GENDER_ICONS, COUNTRY_NAMES, STREAK_EMOJIS;
   var init_constants = __esm({
@@ -391,89 +738,6 @@
     }
   });
 
-  // rating-utils.js
-  function getRatingTier(rating) {
-    if (rating >= 85)
-      return "S-Tier";
-    if (rating >= 70)
-      return "A-Tier";
-    if (rating >= 55)
-      return "B-Tier";
-    if (rating >= 40)
-      return "C-Tier";
-    if (rating >= 25)
-      return "D-Tier";
-    return "F-Tier";
-  }
-  function getTierColor(tier) {
-    switch (tier) {
-      case "S-Tier":
-        return "#eb9834";
-      case "A-Tier":
-        return "#e014aa";
-      case "B-Tier":
-        return "#7f1e82";
-      case "C-Tier":
-        return "#14bbe0";
-      case "D-Tier":
-        return "#92e014";
-      case "F-Tier":
-        return "#808080";
-      default:
-        return "#000000";
-    }
-  }
-  async function getPerformerGlobalRank(performerId, allPerformers) {
-    try {
-      if (!performerId || !allPerformers || allPerformers.length === 0) {
-        return null;
-      }
-      const targetPerformer = allPerformers.find((p) => p.id === performerId);
-      if (!targetPerformer) {
-        return null;
-      }
-      const currentRating = targetPerformer.rating100 ?? 1;
-      const ratedPerformers = allPerformers.filter((p) => {
-        if (p.rating100 !== null && p.rating100 > 1)
-          return true;
-        const statsJson2 = p.custom_fields?.["hotornot_stats"];
-        if (statsJson2) {
-          try {
-            const stats2 = typeof statsJson2 === "string" ? JSON.parse(statsJson2) : statsJson2;
-            return stats2.total_matches > 0;
-          } catch (e) {
-            return false;
-          }
-        }
-        return false;
-      });
-      const higherRatedCount = ratedPerformers.filter((p) => (p.rating100 ?? 1) > currentRating).length;
-      const rank = higherRatedCount + 1;
-      let stats = null;
-      const statsJson = targetPerformer.custom_fields?.["hotornot_stats"];
-      if (statsJson) {
-        try {
-          stats = typeof statsJson === "string" ? JSON.parse(statsJson) : statsJson;
-        } catch (e) {
-          console.warn(`[Ascension] Failed to parse stats for performer ${performerId}:`, e);
-        }
-      }
-      return {
-        rank,
-        total: ratedPerformers.length,
-        rating: currentRating,
-        stats
-      };
-    } catch (err) {
-      console.error("[Ascension] Error calculating global rank:", err);
-      return null;
-    }
-  }
-  var init_rating_utils = __esm({
-    "rating-utils.js"() {
-    }
-  });
-
   // ui-cards.js
   function formatHeight(heightCm) {
     if (!heightCm)
@@ -545,12 +809,9 @@
     if (performer.custom_fields?.hotornot_stats) {
       try {
         const stats = JSON.parse(performer.custom_fields.hotornot_stats);
-        if (stats.current_streak && stats.current_streak >= 3) {
-          const emoji = getStreakEmoji(stats.current_streak);
-          currentStreakDisplay = `
-			  <div class="hon-current-streak" style="position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; z-index: 10;">
-				${emoji} ${stats.current_streak} win${stats.current_streak > 1 ? "s" : ""}
-			  </div>`;
+        if (stats.current_streak && stats.current_streak >= 3 && !gauntletStreak) {
+          const streakDisplay2 = formatStreakDisplay(stats.current_streak);
+          currentStreakDisplay = `<div class="hon-streak-badge" style="position: absolute; top: 5px; left: 5px;">${streakDisplay2}</div>`;
         }
       } catch (e) {
         console.warn(`[Ascension] Failed to parse hotornot_stats for performer ${performer.id}:`, e);
@@ -608,7 +869,7 @@
     while (metaItems.length < minMetaItems) {
       metaItems.push('<div class="hon-meta-item hon-meta-placeholder">&nbsp;</div>');
     }
-    const streakDisplay = gauntletStreak ? `<div class="hon-streak-badge">${formatStreakDisplay(gauntletStreak)}</div>` : "";
+    const streakDisplay = gauntletStreak && gauntletStreak >= 3 ? `<div class="hon-streak-badge">${formatStreakDisplay(gauntletStreak)}</div>` : "";
     let badgeHtml = "";
     if (rank != null && state.totalItemsCount > 0) {
       const percentile = (state.totalItemsCount - rank + 1) / state.totalItemsCount * 100;
@@ -656,7 +917,7 @@
   function createImageCard(image, side, rank = null, gauntletStreak = null) {
     const thumbnailPath = image.paths?.thumbnail || null;
     const rankDisplay = rank != null ? `<span class="hon-image-rank hon-scene-rank">#${rank}</span>` : "";
-    const streakDisplay = gauntletStreak ? `<div class="hon-streak-badge">${formatStreakDisplay(gauntletStreak)}</div>` : "";
+    const streakDisplay = gauntletStreak && gauntletStreak >= 3 ? `<div class="hon-streak-badge">${formatStreakDisplay(gauntletStreak)}</div>` : "";
     return `
     <div class="hon-image-card hon-scene-card" data-image-id="${image.id}" data-side="${side}" data-rating="${image.rating100 || 1}">
       <div class="hon-image-image-container hon-scene-image-container" data-image-url="/images/${image.id}">
@@ -733,318 +994,6 @@
   var init_parsers = __esm({
     "parsers.js"() {
       init_constants();
-    }
-  });
-
-  // math-utils.js
-  var math_utils_exports = {};
-  __export(math_utils_exports, {
-    calculateAverageMatches: () => calculateAverageMatches,
-    calculateMatchOutcome: () => calculateMatchOutcome,
-    calculateWeightsBatch: () => calculateWeightsBatch,
-    clearPerformerRecencyCache: () => clearPerformerRecencyCache,
-    clearRecencyWeightCache: () => clearRecencyWeightCache,
-    debugRecencyWeights: () => debugRecencyWeights,
-    getLowMatchBoost: () => getLowMatchBoost,
-    getProgressiveKFactor: () => getProgressiveKFactor,
-    getRecencyWeight: () => getRecencyWeight,
-    getUnderdogMultiplier: () => getUnderdogMultiplier,
-    isActiveParticipant: () => isActiveParticipant,
-    parsePerformerEloData: () => parsePerformerEloData,
-    selectRandomOpponent: () => selectRandomOpponent,
-    updatePerformerStats: () => updatePerformerStats,
-    weightedRandomSelect: () => weightedRandomSelect
-  });
-  function getLowMatchBoost(performer, avgMatches) {
-    const stats = parsePerformerEloData(performer);
-    const matches = stats.total_matches || 0;
-    if (matches === 0) {
-      return 2;
-    }
-    if (avgMatches > 5 && matches < avgMatches * 0.3) {
-      return 1.5;
-    }
-    if (avgMatches > 10 && matches < avgMatches * 0.5) {
-      return 1.2;
-    }
-    return 1;
-  }
-  function calculateAverageMatches(performers) {
-    if (!performers || performers.length === 0)
-      return 0;
-    const totalMatches = performers.reduce((sum, p) => {
-      const stats = parsePerformerEloData(p);
-      return sum + (stats.total_matches || 0);
-    }, 0);
-    return totalMatches / performers.length;
-  }
-  function clearPerformerRecencyCache(performerId) {
-    for (const key of recencyWeightCache.keys()) {
-      if (key.startsWith(`${performerId}-`)) {
-        recencyWeightCache.delete(key);
-      }
-    }
-  }
-  function getRecencyWeight(performer) {
-    const cacheKey = `${performer.id}-${performer.last_match || "null"}`;
-    const now = Date.now();
-    if (recencyWeightCache.has(cacheKey)) {
-      const cached = recencyWeightCache.get(cacheKey);
-      if (now - cached.timestamp < CACHE_TTL) {
-        return cached.value;
-      }
-    }
-    const stats = parsePerformerEloData(performer);
-    if (!stats.last_match || stats.total_matches === 0) {
-      const result = 1;
-      recencyWeightCache.set(cacheKey, { value: result, timestamp: now });
-      return result;
-    }
-    const lastMatchDate = new Date(stats.last_match);
-    const msSince = now - lastMatchDate.getTime();
-    const minutesSince = msSince / (1e3 * 60);
-    if (minutesSince < 15) {
-      const result = 0;
-      recencyWeightCache.set(cacheKey, { value: result, timestamp: now });
-      return result;
-    }
-    const hoursSince = minutesSince / 60;
-    let freshness = Math.min(1, 0.1 + hoursSince * 0.075);
-    recencyWeightCache.set(cacheKey, { value: freshness, timestamp: now });
-    return freshness;
-  }
-  function clearRecencyWeightCache() {
-    recencyWeightCache.clear();
-  }
-  function debugRecencyWeights(performers, limit = 10) {
-    if (typeof DEBUG === "undefined" || !DEBUG)
-      return;
-    console.group("[HotOrNot] Recency Weight Debug Info");
-    const weights = performers.slice(0, limit).map((p) => ({
-      name: p.name || `Performer #${p.id}`,
-      id: p.id,
-      weight: getRecencyWeight(p),
-      last_match: parsePerformerEloData(p).last_match,
-      total_matches: parsePerformerEloData(p).total_matches || 0
-    })).sort((a, b) => b.weight - a.weight);
-    console.table(weights);
-    console.groupEnd();
-  }
-  function calculateWeightsBatch(performers, avgMatches) {
-    const weights = [];
-    const cache = /* @__PURE__ */ new Map();
-    for (const p of performers) {
-      const cacheKey = `${p.id}-${p.last_match || "null"}`;
-      if (cache.has(cacheKey)) {
-        weights.push(cache.get(cacheKey));
-        continue;
-      }
-      const stats = parsePerformerEloData(p);
-      const rawMatches = stats.total_matches || 0;
-      const cappedMatches = Math.min(rawMatches, 10);
-      const baseWeight = Math.pow(getRecencyWeight(p), 3) + Math.random() * 0.01;
-      const lowMatchBoost = getLowMatchBoost({ ...p, total_matches: cappedMatches }, avgMatches);
-      const finalWeight = baseWeight * lowMatchBoost;
-      const weightData = {
-        p,
-        weight: finalWeight,
-        rating: p.rating100 || 1,
-        matches: rawMatches
-      };
-      cache.set(cacheKey, weightData);
-      weights.push(weightData);
-    }
-    return weights;
-  }
-  function weightedRandomSelect(items, weights) {
-    if (!items?.length || items.length !== weights?.length)
-      return null;
-    const cumulativeWeights = [];
-    let sum = 0;
-    for (let i = 0; i < weights.length; i++) {
-      sum += weights[i];
-      cumulativeWeights.push(sum);
-    }
-    if (sum <= 0)
-      return items[Math.floor(Math.random() * items.length)];
-    const random = Math.random() * sum;
-    let low = 0;
-    let high = cumulativeWeights.length - 1;
-    while (low < high) {
-      const mid = Math.floor((low + high) / 2);
-      if (cumulativeWeights[mid] < random) {
-        low = mid + 1;
-      } else {
-        high = mid;
-      }
-    }
-    return items[low];
-  }
-  function selectRandomOpponent(remainingOpponents, maxChoices = 3) {
-    if (remainingOpponents.length === 0)
-      return null;
-    const closestOpponents = remainingOpponents.slice(-maxChoices);
-    return closestOpponents[Math.floor(Math.random() * closestOpponents.length)];
-  }
-  function parsePerformerEloData(performer) {
-    const defaultStats = {
-      total_matches: 0,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      current_streak: 0,
-      best_streak: 0,
-      worst_streak: 0,
-      last_match: null
-    };
-    if (!performer?.custom_fields)
-      return defaultStats;
-    if (performer.custom_fields.hotornot_stats) {
-      try {
-        const stats = JSON.parse(performer.custom_fields.hotornot_stats);
-        if (stats.performer_record) {
-          delete stats.performer_record;
-        }
-        return { ...defaultStats, ...stats };
-      } catch (e) {
-        console.warn(`[Ascension] Failed to parse stats for ${performer.id}`);
-      }
-    }
-    const eloMatches = parseInt(performer.custom_fields.elo_matches, 10);
-    if (!isNaN(eloMatches))
-      return { ...defaultStats, total_matches: eloMatches };
-    return defaultStats;
-  }
-  function updatePerformerStats(currentStats, won) {
-    const newStats = {
-      ...currentStats,
-      total_matches: (currentStats.total_matches || 0) + 1,
-      last_match: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    delete newStats.history;
-    if (won === null) {
-      newStats.draws = (currentStats.draws || 0) + 1;
-      return newStats;
-    }
-    newStats.wins = won ? (currentStats.wins || 0) + 1 : currentStats.wins || 0;
-    newStats.losses = won ? currentStats.losses || 0 : (currentStats.losses || 0) + 1;
-    newStats.current_streak = won ? currentStats.current_streak >= 0 ? (currentStats.current_streak || 0) + 1 : 1 : currentStats.current_streak <= 0 ? (currentStats.current_streak || 0) - 1 : -1;
-    newStats.best_streak = Math.max(currentStats.best_streak || 0, newStats.current_streak);
-    newStats.worst_streak = Math.min(currentStats.worst_streak || 0, newStats.current_streak);
-    return newStats;
-  }
-  function isActiveParticipant(performerId, mode, gauntletChampion, gauntletFallingItem) {
-    if (mode === "swiss" || mode === "champion")
-      return true;
-    if (mode === "gauntlet") {
-      return true;
-    }
-    return false;
-  }
-  function getUnderdogMultiplier(rating, opponentRating) {
-    const ratingDiff = opponentRating - rating;
-    if (ratingDiff > 30)
-      return 1.5;
-    if (ratingDiff > 20)
-      return 1.3;
-    if (ratingDiff > 10)
-      return 1.1;
-    return 1;
-  }
-  function calculateMatchOutcome({
-    winnerRating,
-    loserRating,
-    mode,
-    winnerMatchCount,
-    loserMatchCount,
-    winnerStats = {},
-    loserStats = {},
-    isSpecialChallenge = false
-  }) {
-    const ratingDiff = loserRating - winnerRating;
-    const expectedWinner = 1 / (1 + Math.pow(10, ratingDiff / 400));
-    const winnerK = getProgressiveKFactor(winnerRating, null, winnerMatchCount, mode);
-    const loserK = getProgressiveKFactor(loserRating, null, loserMatchCount, mode);
-    const winnerUnderdogMult = getUnderdogMultiplier(winnerRating, loserRating);
-    let lossProtection = isSpecialChallenge ? 0.1 : getChallengeProtectionMultiplier(loserRating, winnerRating);
-    let winnerGain = Math.round(winnerK * (1 - expectedWinner) * winnerUnderdogMult);
-    let loserLoss = Math.round(loserK * expectedWinner * lossProtection);
-    if (mode === "gauntlet") {
-      const currentStreak = winnerStats.current_streak || 0;
-      if (currentStreak >= 3) {
-        const gauntletDampener = Math.max(0.3, 1 - (currentStreak - 3) * 0.15);
-        winnerGain = Math.ceil(winnerGain * gauntletDampener);
-      }
-    }
-    if (mode === "champion") {
-      const winStreak = winnerStats.current_streak || 0;
-      if (winStreak >= 5) {
-        const streakPenalty = winStreak >= 10 ? 0.4 : 0.7;
-        winnerGain = Math.ceil(winnerGain * streakPenalty);
-      }
-    }
-    if (winnerRating >= 85) {
-      winnerGain = Math.ceil(winnerGain * 0.6);
-    } else if (winnerRating >= 70) {
-      winnerGain = Math.ceil(winnerGain * 0.8);
-    }
-    if (winnerRating < loserRating - 20) {
-      const ratingDiff2 = loserRating - winnerRating;
-      const scaleFactor = Math.max(0.3, 1 - (ratingDiff2 - 20) / 100);
-      winnerGain = Math.ceil(winnerGain * scaleFactor);
-      loserLoss = Math.ceil(loserLoss * scaleFactor);
-      loserLoss = Math.min(loserLoss, 5);
-    }
-    if (loserRating < winnerRating - 15) {
-      const gap = winnerRating - loserRating;
-      const mitigationFactor = Math.max(0.2, 1 - gap / 45);
-      loserLoss = Math.ceil(loserLoss * mitigationFactor);
-      if (gap > 25) {
-        loserLoss = Math.min(loserLoss, 3);
-      }
-    }
-    return {
-      winnerGain: Math.max(1, winnerGain),
-      loserLoss: Math.max(0, loserLoss)
-    };
-  }
-  function getProgressiveKFactor(rating, opponentRating, matchCount, mode = "swiss") {
-    const count = matchCount || 0;
-    const experienceFactor = 0.5 + 0.5 / (1 + Math.exp((count - 18) / 6));
-    let baseK = 32 * experienceFactor;
-    if (rating > 60) {
-      const reductionFactor = Math.max(0.5, 1 - (rating - 60) / 70);
-      baseK *= reductionFactor;
-    }
-    if (mode === "champion") {
-      let kFactor = Math.round(baseK * 0.85);
-      return Math.min(35, Math.max(6, kFactor));
-    } else if (mode === "gauntlet") {
-      let kFactor = Math.round(baseK * 1.1);
-      return Math.min(45, Math.max(8, kFactor));
-    }
-    return Math.min(40, Math.max(6, Math.round(baseK)));
-  }
-  function getChallengeProtectionMultiplier(rating, opponentRating) {
-    const ratingDiff = opponentRating - rating;
-    if (ratingDiff > 15) {
-      if (ratingDiff > 30) {
-        return 0.7;
-      } else if (ratingDiff > 25) {
-        return 0.8;
-      } else if (ratingDiff > 20) {
-        return 0.85;
-      } else {
-        return 0.9;
-      }
-    }
-    return 1;
-  }
-  var recencyWeightCache, CACHE_TTL;
-  var init_math_utils = __esm({
-    "math-utils.js"() {
-      recencyWeightCache = /* @__PURE__ */ new Map();
-      CACHE_TTL = 5 * 60 * 1e3;
     }
   });
 
@@ -1223,18 +1172,16 @@
   async function handleComparison(winnerId, loserId, winnerCurrentRating, loserCurrentRating, loserRank = null, winnerObj = null, loserObj = null, isDraw = false) {
     const winnerRating = winnerCurrentRating || 1;
     const loserRating = loserCurrentRating || 1;
-    let freshWinnerObj = winnerObj;
-    let freshLoserObj = loserObj;
-    if (state.battleType === "performers" && (!winnerObj || !loserObj)) {
-      const [fetchedWinner, fetchedLoser] = await Promise.all([
-        winnerId && !winnerObj ? fetchPerformerById(winnerId) : Promise.resolve(winnerObj),
-        loserId && !loserObj ? fetchPerformerById(loserId) : Promise.resolve(loserObj)
+    let freshWinnerObj, freshLoserObj;
+    try {
+      [freshWinnerObj, freshLoserObj] = await Promise.all([
+        fetchPerformerById(winnerId),
+        fetchPerformerById(loserId)
       ]);
-      freshWinnerObj = fetchedWinner || winnerObj;
-      freshLoserObj = fetchedLoser || loserObj;
-    } else {
-      freshWinnerObj = winnerObj || freshWinnerObj;
-      freshLoserObj = loserObj || freshLoserObj;
+    } catch (e) {
+      console.error("[Ascension] Failed to fetch fresh performer data:", e);
+      freshWinnerObj = winnerObj;
+      freshLoserObj = loserObj;
     }
     let winnerMatchCount = 0;
     let loserMatchCount = 0;
@@ -1280,8 +1227,8 @@
     const newWinnerRating = Math.min(100, Math.max(1, winnerRating + winnerGain));
     const newLoserRating = Math.min(100, Math.max(1, loserRating - loserLoss));
     const isFirstMatchGlobal = (state.currentMode === "gauntlet" || state.currentMode === "champion") && !state.gauntletChampion;
-    const shouldTrackWinner = state.battleType === "performers" && (state.currentMode === "gauntlet" || state.currentMode === "champion" || isActiveParticipant(winnerId, state.currentMode, state.gauntletChampion, state.gauntletFallingItem) || isFirstMatchGlobal);
-    const shouldTrackLoser = state.battleType === "performers" && (state.currentMode === "gauntlet" || state.currentMode === "champion" || isActiveParticipant(loserId, state.currentMode, state.gauntletChampion, state.gauntletFallingItem) || isFirstMatchGlobal);
+    const shouldTrackWinner = state.battleType === "performers";
+    const shouldTrackLoser = state.battleType === "performers";
     const winnerStatus = isDraw ? null : true;
     const loserStatus = isDraw ? null : false;
     const winnerOldStats = shouldTrackWinner && freshWinnerObj ? {
@@ -1336,20 +1283,22 @@
       console.error("[Ascension] Cannot update rating: One or both IDs are missing", { winnerId, loserId });
       return { newWinnerRating, newLoserRating, winnerChange: winnerGain, loserChange: -loserLoss };
     }
-    await updateItemRating(
-      winnerId,
-      newWinnerRating,
-      shouldTrackWinner ? freshWinnerObj : null,
-      winnerStatus,
-      loserId
-    );
-    await updateItemRating(
-      loserId,
-      newLoserRating,
-      shouldTrackLoser ? freshLoserObj : null,
-      loserStatus,
-      winnerId
-    );
+    await Promise.all([
+      updateItemRating(
+        winnerId,
+        newWinnerRating,
+        freshWinnerObj,
+        winnerStatus,
+        loserId
+      ),
+      updateItemRating(
+        loserId,
+        newLoserRating,
+        freshLoserObj,
+        loserStatus,
+        winnerId
+      )
+    ]);
     return {
       newWinnerRating,
       newLoserRating,
@@ -1385,14 +1334,6 @@
     if (!id) {
       console.error("[Ascension] Cannot update performer: ID is missing");
       return;
-    }
-    try {
-      const mathUtils = await Promise.resolve().then(() => (init_math_utils(), math_utils_exports));
-      if (mathUtils.clearPerformerRecencyCache) {
-        mathUtils.clearPerformerRecencyCache(id);
-      }
-    } catch (e) {
-      console.debug(`[Ascension] Could not clear recency cache for performer ${id}`);
     }
     let performerName = "Unknown";
     if (performerObj?.name) {
@@ -1545,14 +1486,6 @@
   }
   async function updateItemRatingDirect(itemId, rating, statsObj) {
     if (state.battleType === "performers") {
-      try {
-        const mathUtils = await Promise.resolve().then(() => (init_math_utils(), math_utils_exports));
-        if (mathUtils.clearPerformerRecencyCache) {
-          mathUtils.clearPerformerRecencyCache(itemId);
-        }
-      } catch (e) {
-        console.debug(`[Ascension] Could not clear recency cache for performer ${itemId}`);
-      }
       const fields = {};
       if (statsObj) {
         const statsToRestore = { ...statsObj };
@@ -2406,6 +2339,9 @@ Match Stats:`;
       const outcome2 = await handleComparison(winnerId, loserId, winnerRating, loserRating, loserRank, winnerItem, loserItem);
       updateChampionModeState(winnerId, winnerItem, loserId, outcome2.newWinnerRating);
       applyVisualFeedback(winnerCard, loserCard, winnerRating, loserRating, outcome2);
+      setTimeout(() => {
+        loadNewPair();
+      }, 1500);
       return;
     }
     const outcome = await handleComparison(winnerId, loserId, winnerRating, loserRating, null, winnerItem, loserItem);
@@ -2432,9 +2368,14 @@ Match Stats:`;
       state.gauntletDefeated.push(loserId);
       state.gauntletWins++;
       state.gauntletChampion.rating100 = newWinnerRating;
+      console.log(`[Champion Mode] Champion ${winnerItem.name} won, streak: ${state.gauntletWins}`);
     } else {
+      console.log(`[Champion Mode] New champion: ${winnerItem.name} defeats ${state.gauntletChampion?.name || "Unknown"}`);
       state.gauntletChampion = winnerItem;
       state.gauntletWins = 1;
+      if (state.gauntletChampion.id !== loserId) {
+        state.gauntletDefeated.push(loserId);
+      }
       state.gauntletChampion.rating100 = newWinnerRating;
     }
   }
@@ -2557,7 +2498,7 @@ Match Stats:`;
       if (!isVictoryVisible) {
         loadNewPair();
       }
-    }, 1200);
+    }, 1500);
   }
   var init_match_handler = __esm({
     "match-handler.js"() {
@@ -2786,22 +2727,58 @@ Match Stats:`;
       return eliteTiers.includes(tier1);
     return true;
   }
+  function isPerformerRecentlySelected(performerId) {
+    if (!state.recentlySelectedPerformers) {
+      state.recentlySelectedPerformers = [];
+    }
+    return state.recentlySelectedPerformers.includes(performerId);
+  }
+  function isPerformerOnCooldown(performerId) {
+    if (!state.recentlySelectedPerformers) {
+      state.recentlySelectedPerformers = [];
+    }
+    return state.recentlySelectedPerformers.includes(performerId);
+  }
+  function addToRecentlySelected(performerId) {
+    if (!state.recentlySelectedPerformers) {
+      state.recentlySelectedPerformers = [];
+    }
+    state.recentlySelectedPerformers.push(performerId);
+    if (state.recentlySelectedPerformers.length > RECENT_PERFORMER_COOLDOWN) {
+      state.recentlySelectedPerformers.shift();
+    }
+  }
   async function fetchSwissPairPerformers() {
+    if (!state.sampleCounter)
+      state.sampleCounter = 0;
+    state.sampleCounter++;
+    const shouldRefreshSample = state.sampleCounter > 50;
+    if (shouldRefreshSample) {
+      state.sampleCounter = 0;
+      console.log("[Ascension] Refreshing performer sample pool");
+    }
     const performerFilter = getPerformerFilter(state.cachedUrlFilter, state.selectedGenders);
+    const countQuery = `query CountPerformers($performer_filter: PerformerFilterType) {
+    findPerformers(performer_filter: $performer_filter, filter: { per_page: 0 }) { count }
+  }`;
+    const countResult = await graphqlQuery(countQuery, { performer_filter: performerFilter });
+    const totalPerformers = countResult.findPerformers.count;
     const query = `query FindPerformersByRating($performer_filter: PerformerFilterType, $filter: FindFilterType) {
     findPerformers(performer_filter: $performer_filter, filter: $filter) { 
-      count, 
       performers { ${PERFORMER_FRAGMENT} } 
     }
   }`;
     const result = await graphqlQuery(query, {
       performer_filter: performerFilter,
-      filter: { per_page: -1, sort: "rating", direction: "DESC" }
+      filter: {
+        per_page: 300,
+        sort: shouldRefreshSample ? "random" : "rating",
+        // Force new random sample when refreshing
+        direction: "DESC"
+      }
     });
     const performers = result.findPerformers.performers || [];
-    state.totalItemsCount = performers.length;
-    if (performers.length < 2)
-      return { items: await fetchRandomPerformers(2), ranks: [null, null] };
+    state.totalItemsCount = totalPerformers;
     const logMatch = (type, p1, p2, w1, w2, color) => {
       const r1 = ((p1.rating100 || 0) / 10).toFixed(1);
       const r2 = ((p2.rating100 || 0) / 10).toFixed(1);
@@ -2825,7 +2802,68 @@ Match Stats:`;
         // p2 rating
       );
     };
+    if (!state.tierRotation) {
+      state.tierRotation = {
+        cycle: ["any", "S-Tier", "A-Tier", "B-Tier", "C-Tier", "D-Tier", "newcomers"],
+        currentIndex: 0,
+        sessionMatches: 0,
+        lastSeen: {},
+        matchCount: 0
+      };
+    }
+    function updateTierFocus(performers2) {
+      state.tierRotation.matchCount = (state.tierRotation.matchCount || 0) + 1;
+      const matchesUntilChange = 3 + Math.floor(Math.random() * 5);
+      if (state.tierRotation.sessionMatches >= matchesUntilChange) {
+        let selectedTier = "any";
+        let attempts = 0;
+        const maxAttempts = 10;
+        const tierMap2 = /* @__PURE__ */ new Map();
+        performers2.forEach((p) => {
+          const tier = getRatingTier(p.rating100 || 1);
+          if (!tierMap2.has(tier)) {
+            tierMap2.set(tier, []);
+          }
+          tierMap2.get(tier).push(p);
+        });
+        while (attempts < maxAttempts) {
+          const randomIndex = Math.floor(Math.random() * state.tierRotation.cycle.length);
+          const tier = state.tierRotation.cycle[randomIndex];
+          if (tier === "any" || tier === "newcomers") {
+            selectedTier = tier;
+            break;
+          } else {
+            const tierPerformers = tierMap2.get(tier) || [];
+            if (tierPerformers.length >= 20) {
+              selectedTier = tier;
+              break;
+            }
+          }
+          attempts++;
+        }
+        if (attempts >= maxAttempts) {
+          selectedTier = "any";
+        }
+        state.tierRotation.currentIndex = state.tierRotation.cycle.indexOf(selectedTier);
+        state.tierRotation.sessionMatches = 0;
+        state.tierRotation.lastSeen[selectedTier] = Date.now();
+      }
+      state.tierRotation.sessionMatches++;
+      return state.tierRotation.cycle[state.tierRotation.currentIndex];
+    }
+    function getTierFilteredPerformers(allPerformers, focusTier) {
+      if (focusTier === "any" || focusTier === "newcomers") {
+        return allPerformers;
+      }
+      return allPerformers.filter((p) => {
+        const tier = getRatingTier(p.rating100 || 1);
+        return tier === focusTier;
+      });
+    }
+    const currentTierFocus = updateTierFocus(performers);
+    console.log(`[Ascension] Tier focus: ${currentTierFocus}`);
     const avgMatches = calculateAverageMatches(performers);
+    1;
     const tierMap = /* @__PURE__ */ new Map();
     performers.forEach((p) => {
       const tier = getRatingTier(p.rating100 || 1);
@@ -2834,9 +2872,13 @@ Match Stats:`;
       }
       tierMap.get(tier).push(p);
     });
+    let tierFilteredPerformers = performers;
+    if (currentTierFocus !== "any") {
+      tierFilteredPerformers = getTierFilteredPerformers(performers, currentTierFocus);
+    }
     const weightMap = /* @__PURE__ */ new Map();
     const eligiblePerformers = [];
-    for (const p of performers) {
+    for (const p of tierFilteredPerformers) {
       const cacheKey = `${p.id}-${p.last_match || "null"}`;
       let weightData;
       if (weightMap.has(cacheKey)) {
@@ -2847,7 +2889,18 @@ Match Stats:`;
         const cappedMatches = Math.min(rawMatches, 10);
         const baseWeight = Math.pow(getRecencyWeight(p), 3) + Math.random() * 0.01;
         const lowMatchBoost = getLowMatchBoost({ ...p, total_matches: cappedMatches }, avgMatches);
-        const finalWeight = baseWeight * lowMatchBoost;
+        let tierBoost = 1;
+        if (currentTierFocus === "newcomers") {
+          tierBoost = getNewcomerBoost(p);
+        } else if (currentTierFocus !== "any") {
+          const performerTier = getRatingTier(p.rating100 || 1);
+          if (performerTier === currentTierFocus) {
+            tierBoost = 2;
+          }
+        }
+        const matchDistributionBoost = getMatchCountDistributionBoost(p, performers);
+        const sessionMatchPenalty = getSessionMatchPenalty(p.id);
+        const finalWeight = baseWeight * lowMatchBoost * tierBoost * matchDistributionBoost * sessionMatchPenalty;
         weightData = {
           p,
           weight: finalWeight,
@@ -2858,27 +2911,36 @@ Match Stats:`;
         weightMap.set(cacheKey, weightData);
       }
       const stats = parsePerformerEloData(weightData.p);
-      const isBlacklisted = weightData.weight === 0;
       const isUnrated = stats.total_matches === 0;
-      const isHighWeight = weightData.weight > 0.01;
+      const isHighWeight = weightData.weight > 1;
       const isUndermatched = weightData.matches > 0 && weightData.matches < avgMatches * 0.2;
-      if (!isBlacklisted && (isUnrated || isHighWeight || isUndermatched)) {
+      if (isUnrated || isHighWeight || isUndermatched) {
         eligiblePerformers.push(weightData);
       }
     }
     eligiblePerformers.sort((a, b) => b.weight - a.weight);
-    if (eligiblePerformers.length < 2) {
+    const nonCooldownEligible = eligiblePerformers.filter(
+      (item) => !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
+    );
+    const finalEligiblePerformers = nonCooldownEligible.length > 1 ? nonCooldownEligible : eligiblePerformers;
+    if (finalEligiblePerformers.length < 2) {
       console.warn("[Ascension] Not enough eligible performers after applying filters.");
       return { items: await fetchRandomPerformers(2), ranks: [null, null] };
     }
-    const topEligible = eligiblePerformers.slice(0, Math.min(eligiblePerformers.length, 15));
-    if (topEligible.length === 0) {
-      console.warn("[Ascension] No eligible performers for seed selection.");
-      return { items: await fetchRandomPerformers(2), ranks: [null, null] };
+    let seed;
+    if (finalEligiblePerformers.length > 0) {
+      const weights = finalEligiblePerformers.map((item) => item.weight);
+      const selected = weightedRandomSelect(finalEligiblePerformers, weights);
+      seed = selected || finalEligiblePerformers[0];
+    } else {
+      const topEligible = finalEligiblePerformers.slice(0, Math.min(finalEligiblePerformers.length, 15));
+      const seedIndex = Math.floor(Math.random() * topEligible.length);
+      seed = topEligible[seedIndex];
     }
-    const seedWeights = topEligible.map((item) => Math.max(0.01, item.weight));
-    const seedItem = weightedRandomSelect(topEligible, seedWeights);
-    const seed = seedItem || topEligible[0];
+    if (seed && seed.p) {
+      trackPerformerSelection(seed.p.id);
+      addToRecentlySelected(seed.p.id);
+    }
     const tier1 = getRatingTier(seed.rating);
     if (shouldForceCrossTierMatch()) {
       const crossTierOpponent = getCrossTierOpponent(performers, seed.p, eligiblePerformers);
@@ -2904,26 +2966,22 @@ Match Stats:`;
         return false;
       if (!canBattleByTier(tier1, getRatingTier(item.rating)))
         return false;
-      if (item.weight === 0)
+      if (isPerformerOnCooldown(item.p.id) || isPerformerRecentlySelected(item.p.id))
         return false;
       return true;
     });
     if (validOpponents.length > 0) {
-      const viableOpponents = validOpponents.filter((opponent) => opponent.weight > 0.05);
-      const opponentsToUse = viableOpponents.length > 0 ? viableOpponents : validOpponents;
-      if (opponentsToUse.length > 0) {
-        const weights = opponentsToUse.map((opponent) => Math.max(0.01, opponent.weight));
-        const opponentItem = weightedRandomSelect(opponentsToUse, weights);
-        if (opponentItem) {
-          logMatch("RANGE-VALID", seed.p, opponentItem.p, seed.weight, opponentItem.weight, "#2196F3");
-          const rank1 = getPerformerRankInList(seed.p, performers);
-          const rank2 = getPerformerRankInList(opponentItem.p, performers);
-          return { items: [seed.p, opponentItem.p], ranks: [rank1, rank2] };
-        }
+      const weights = validOpponents.map((opponent) => opponent.weight);
+      const opponentItem = weightedRandomSelect(validOpponents, weights);
+      if (opponentItem) {
+        logMatch("RANGE-VALID", seed.p, opponentItem.p, seed.weight, opponentItem.weight, "#2196F3");
+        const rank1 = getPerformerRankInList(seed.p, performers);
+        const rank2 = getPerformerRankInList(opponentItem.p, performers);
+        return { items: [seed.p, opponentItem.p], ranks: [rank1, rank2] };
       }
     }
     const looseRangeOpponents = eligiblePerformers.filter(
-      (item) => item.p.id !== seed.p.id && Math.abs(seed.rating - item.rating) <= 25
+      (item) => item.p.id !== seed.p.id && Math.abs(seed.rating - item.rating) <= 25 && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
     );
     if (looseRangeOpponents.length > 0) {
       const looseWeights = looseRangeOpponents.map((opponent) => opponent.weight);
@@ -2935,7 +2993,9 @@ Match Stats:`;
         return { items: [seed.p, opponentItem.p], ranks: [rank1, rank2] };
       }
     }
-    const fallbackOpponents = eligiblePerformers.filter((item) => item.p.id !== seed.p.id);
+    const fallbackOpponents = eligiblePerformers.filter(
+      (item) => item.p.id !== seed.p.id && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
+    );
     if (fallbackOpponents.length > 0) {
       const fallbackWeights = fallbackOpponents.map((opponent) => opponent.weight);
       const fallbackItem = weightedRandomSelect(fallbackOpponents, fallbackWeights);
@@ -2948,6 +3008,45 @@ Match Stats:`;
     }
     console.warn("[Ascension] Extremely unlikely scenario in Swiss pairing, using basic random fallback.");
     return { items: await fetchRandomPerformers(2), ranks: [null, null] };
+  }
+  function getMatchCountDistributionBoost(performer, allPerformers) {
+    const stats = parsePerformerEloData(performer);
+    const matches = stats.total_matches || 0;
+    const matchCounts = allPerformers.map((p) => {
+      const s = parsePerformerEloData(p);
+      return s.total_matches || 0;
+    }).sort((a, b) => a - b);
+    const percentile = matchCounts.filter((m) => m < matches).length / matchCounts.length * 100;
+    if (percentile < 10) {
+      return 1.5;
+    } else if (percentile < 25) {
+      return 1.3;
+    } else if (percentile < 50) {
+      return 1.1;
+    } else if (percentile > 90) {
+      return 0.7;
+    }
+    return 1;
+  }
+  function getSessionMatchPenalty(performerId) {
+    if (!state.sessionMatchCounts) {
+      state.sessionMatchCounts = {};
+    }
+    const sessionCount = state.sessionMatchCounts[performerId] || 0;
+    if (sessionCount > 2) {
+      return 0.1;
+    } else if (sessionCount > 1) {
+      return 0.3;
+    } else if (sessionCount > 0) {
+      return 0.6;
+    }
+    return 1;
+  }
+  function trackPerformerSelection(performerId) {
+    if (!state.sessionMatchCounts) {
+      state.sessionMatchCounts = {};
+    }
+    state.sessionMatchCounts[performerId] = (state.sessionMatchCounts[performerId] || 0) + 1;
   }
   function getPerformerRankInList(performer, allPerformers) {
     if (!performer || performer.rating100 === null || performer.rating100 === 1)
@@ -3084,6 +3183,7 @@ Match Stats:`;
     const pairKey = [id1, id2].sort().join("-");
     return state.seenPairs.has(pairKey);
   }
+  var RECENT_PERFORMER_COOLDOWN;
   var init_battle_engine = __esm({
     "battle-engine.js"() {
       init_api_client();
@@ -3095,6 +3195,7 @@ Match Stats:`;
       init_match_handler();
       init_ui_swipe();
       init_rating_utils();
+      RECENT_PERFORMER_COOLDOWN = 50;
     }
   });
 
@@ -3324,13 +3425,17 @@ Match Stats:`;
       return tierValues[b] - tierValues[a];
     });
     const allTiersGroup = {
-      "All Tiers": processedPerformers
+      "All Tier Performers": processedPerformers
     };
-    const allGroups = { ...allTiersGroup, ...tierGroups };
+    const renamedTierGroups = {};
+    Object.keys(tierGroups).forEach((tierName) => {
+      renamedTierGroups[`${tierName} Performers`] = tierGroups[tierName];
+    });
+    const allGroups = { ...allTiersGroup, ...renamedTierGroups };
     const groupHTML = Object.keys(allGroups).map((groupName) => {
       const performersInGroup = allGroups[groupName];
-      const isAllTiers = groupName === "All Tiers";
-      const groupColor = isAllTiers ? "#ffffff" : getTierColor(groupName);
+      const isAllTiers = groupName === "All Tier Performers";
+      const groupColor = isAllTiers ? "#ffffff" : getTierColor(groupName.replace(" Performers", ""));
       const rows = performersInGroup.map((p) => {
         const winRate = p.total_matches > 0 ? (p.wins / p.total_matches * 100).toFixed(1) : "0.0";
         const streakDisplay = p.current_streak > 0 ? `<span class="hon-stats-positive">+${p.current_streak}</span>` : p.current_streak < 0 ? `<span class="hon-stats-negative">${p.current_streak}</span>` : "0";
@@ -3364,13 +3469,10 @@ Match Stats:`;
         });
         const countdownFormatted = formatCountdown(timeUntilFull);
         const weightDisplay = currentWeight >= maxWeight ? weightStatus : `${weightStatus}<br><small class="countdown" data-performer-id="${p.id}" data-last-match="${p.last_match || ""}" style="font-size: 0.7em;">${countdownFormatted || weightFormatted}</small>`;
-        let ratingColor = groupColor;
-        if (!isAllTiers) {
-          const isUnrated = p.rating === "Unrated";
-          const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
-          const tier = getRatingTier(numericRating);
-          ratingColor = getTierColor(tier);
-        }
+        const isUnrated = p.rating === "Unrated";
+        const numericRating = isUnrated ? 1 : parseFloat(p.rating) * 10;
+        const performerTier = getRatingTier(numericRating);
+        const ratingColor = getTierColor(performerTier);
         return `
         <tr data-rank="${p.rank}" 
             data-rating="${p.rating}" 
