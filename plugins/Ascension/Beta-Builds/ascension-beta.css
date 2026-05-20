@@ -1096,22 +1096,6 @@
   font-weight: bold;
   z-index: 5;
 }
-.hon-streak-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background:
-    linear-gradient(
-      135deg,
-      #ff6b35,
-      #f7c531);
-  color: #000;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  z-index: 5;
-  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
 }
 .hon-image-rank-overlay {
   position: absolute;
@@ -3974,18 +3958,16 @@
   position: absolute;
   top: 10px;
   left: 10px;
-  background:
-    linear-gradient(
-      135deg,
-      #ff6b35,
-      #f7c531);
+  background: linear-gradient(
+    135deg,
+    rgba(49, 247, 237, 0.8), /* #31f7ed with 80% opacity */
+    rgba(42, 141, 222, 0.8)  /* #2a8dde with 80% opacity */
+  );
   color: #000;
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.9rem;
-  font-weight: bold;
   z-index: 5;
-  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
 }
 
 .hon-image-rank-overlay {
