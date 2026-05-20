@@ -347,16 +347,6 @@
     state.sessionMatchCounts = {};
     state.recentlySelectedPerformers = [];
   }
-  function getNewcomerBoost(performer) {
-    const stats = parsePerformerEloData(performer);
-    if (stats.total_matches === 0)
-      return 3;
-    if (stats.total_matches < 5)
-      return 2;
-    if (stats.total_matches < 15)
-      return 1.5;
-    return 1;
-  }
   var state;
   var init_state = __esm({
     "state.js"() {
@@ -393,7 +383,6 @@
         // Track seen performer pairs to prevent repetition
         // Skip tracking
         skippedId: null
-        // Keep for backward compatibility but deprecate
       };
       state.tierRotation = state.tierRotation || {
         currentFocus: null,
@@ -2537,7 +2526,7 @@ Match Stats:`;
               clickTimeout = setTimeout(() => {
                 clearTimeout(clickTimeout);
                 clickTimeout = null;
-              }, 300);
+              }, 500);
               e.stopPropagation();
               handleChooseItem(e);
             });
@@ -2662,16 +2651,6 @@ Match Stats:`;
   function shouldForceCrossTierMatch() {
     return Math.random() < 0.1;
   }
-  function getCrossTierOpponent(allPerformers, targetPerformer, eligiblePerformers) {
-    const targetRating = targetPerformer.rating100 || 1;
-    const crossTierCandidates = eligiblePerformers.filter(
-      (item) => item.p.id !== targetPerformer.id && (item.p.rating100 || 1) >= targetRating + 20
-    );
-    if (crossTierCandidates.length >= 10) {
-      return crossTierCandidates[Math.floor(Math.random() * crossTierCandidates.length)].p;
-    }
-    return null;
-  }
   function attachVictoryHandlers(area) {
     const btn = area.querySelector("#hon-new-gauntlet");
     if (btn) {
@@ -2748,6 +2727,14 @@ Match Stats:`;
       state.recentlySelectedPerformers.shift();
     }
   }
+  function shuffleArray2(array) {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  }
   async function fetchSwissPairPerformers() {
     if (!state.sampleCounter)
       state.sampleCounter = 0;
@@ -2771,9 +2758,8 @@ Match Stats:`;
     const result = await graphqlQuery(query, {
       performer_filter: performerFilter,
       filter: {
-        per_page: 300,
-        sort: shouldRefreshSample ? "random" : "rating",
-        // Force new random sample when refreshing
+        per_page: 500,
+        sort: "random",
         direction: "DESC"
       }
     });
@@ -2802,15 +2788,14 @@ Match Stats:`;
         // p2 rating
       );
     };
-    if (!state.tierRotation) {
-      state.tierRotation = {
-        cycle: ["any", "S-Tier", "A-Tier", "B-Tier", "C-Tier", "D-Tier", "newcomers"],
-        currentIndex: 0,
-        sessionMatches: 0,
-        lastSeen: {},
-        matchCount: 0
-      };
-    }
+    state.tierRotation = state.tierRotation || {
+      currentFocus: null,
+      cycle: shuffleArray2(["any", "S-Tier", "A-Tier", "B-Tier", "C-Tier", "D-Tier", "F-Tier", "newcomers"]),
+      currentIndex: 0,
+      sessionMatches: 0,
+      lastSeen: {},
+      matchCount: 0
+    };
     function updateTierFocus(performers2) {
       state.tierRotation.matchCount = (state.tierRotation.matchCount || 0) + 1;
       const matchesUntilChange = 3 + Math.floor(Math.random() * 5);
@@ -2829,14 +2814,41 @@ Match Stats:`;
         while (attempts < maxAttempts) {
           const randomIndex = Math.floor(Math.random() * state.tierRotation.cycle.length);
           const tier = state.tierRotation.cycle[randomIndex];
-          if (tier === "any" || tier === "newcomers") {
+          console.log(`[Ascension] Attempting tier: ${tier}`);
+          if (tier === "any") {
             selectedTier = tier;
             break;
+          } else if (tier === "newcomers") {
+            const newcomerPerformers = performers2.filter((p) => {
+              const stats = parsePerformerEloData(p);
+              return stats.total_matches < 6;
+            });
+            console.log(`[Ascension] Newcomers tier: ${newcomerPerformers.length} performers`);
+            if (newcomerPerformers.length >= 20) {
+              selectedTier = tier;
+              console.log(`[Ascension] Selected tier: ${selectedTier}`);
+              break;
+            } else {
+              console.log(`[Ascension] Newcomers tier rejected - not enough performers (${newcomerPerformers.length} < 20)`);
+            }
           } else {
             const tierPerformers = tierMap2.get(tier) || [];
+            console.log(`[Ascension] Tier ${tier}: ${tierPerformers.length} performers`);
             if (tierPerformers.length >= 20) {
-              selectedTier = tier;
-              break;
+              const totalWeight = tierPerformers.reduce((sum, p) => {
+                return sum + getRecencyWeight(p);
+              }, 0);
+              const avgRecencyWeight = tierPerformers.length > 0 ? totalWeight / tierPerformers.length : 0;
+              console.log(`[Ascension] Tier ${tier}: ${tierPerformers.length} performers, avg recency weight: ${avgRecencyWeight.toFixed(2)}`);
+              if (avgRecencyWeight >= 0.6) {
+                selectedTier = tier;
+                console.log(`[Ascension] Selected tier: ${selectedTier}`);
+                break;
+              } else {
+                console.log(`[Ascension] Tier ${tier} rejected - avg recency weight ${avgRecencyWeight.toFixed(2)} < 0.60`);
+              }
+            } else {
+              console.log(`[Ascension] Tier ${tier} rejected - not enough performers (${tierPerformers.length} < 20)`);
             }
           }
           attempts++;
@@ -2844,12 +2856,12 @@ Match Stats:`;
         if (attempts >= maxAttempts) {
           selectedTier = "any";
         }
-        state.tierRotation.currentIndex = state.tierRotation.cycle.indexOf(selectedTier);
+        state.tierRotation.focusTier = selectedTier;
         state.tierRotation.sessionMatches = 0;
         state.tierRotation.lastSeen[selectedTier] = Date.now();
       }
       state.tierRotation.sessionMatches++;
-      return state.tierRotation.cycle[state.tierRotation.currentIndex];
+      return state.tierRotation.focusTier || "any";
     }
     function getTierFilteredPerformers(allPerformers, focusTier) {
       if (focusTier === "any" || focusTier === "newcomers") {
@@ -2863,7 +2875,6 @@ Match Stats:`;
     const currentTierFocus = updateTierFocus(performers);
     console.log(`[Ascension] Tier focus: ${currentTierFocus}`);
     const avgMatches = calculateAverageMatches(performers);
-    1;
     const tierMap = /* @__PURE__ */ new Map();
     performers.forEach((p) => {
       const tier = getRatingTier(p.rating100 || 1);
@@ -2890,9 +2901,7 @@ Match Stats:`;
         const baseWeight = Math.pow(getRecencyWeight(p), 3) + Math.random() * 0.01;
         const lowMatchBoost = getLowMatchBoost({ ...p, total_matches: cappedMatches }, avgMatches);
         let tierBoost = 1;
-        if (currentTierFocus === "newcomers") {
-          tierBoost = getNewcomerBoost(p);
-        } else if (currentTierFocus !== "any") {
+        if (currentTierFocus !== "any" && currentTierFocus !== "newcomers") {
           const performerTier = getRatingTier(p.rating100 || 1);
           if (performerTier === currentTierFocus) {
             tierBoost = 2;
@@ -2943,19 +2952,25 @@ Match Stats:`;
     }
     const tier1 = getRatingTier(seed.rating);
     if (shouldForceCrossTierMatch()) {
-      const crossTierOpponent = getCrossTierOpponent(performers, seed.p, eligiblePerformers);
-      if (crossTierOpponent && canBattleByTier(tier1, getRatingTier(crossTierOpponent.rating100 || 0))) {
-        logMatch(
-          "CROSS-TIER",
-          seed.p,
-          crossTierOpponent,
-          seed.weight,
-          eligiblePerformers.find((item) => item.p.id === crossTierOpponent.id)?.weight || 0,
-          "#E91E63"
-        );
-        const rank1 = getPerformerRankInList(seed.p, performers);
-        const rank2 = getPerformerRankInList(crossTierOpponent, performers);
-        return { items: [seed.p, crossTierOpponent], ranks: [rank1, rank2] };
+      const crossTierCandidates = eligiblePerformers.filter(
+        (item) => item.p.id !== seed.p.id && (item.p.rating100 || 1) >= seed.rating + 20 && canBattleByTier(tier1, getRatingTier(item.p.rating100 || 0)) && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
+      );
+      if (crossTierCandidates.length >= 10) {
+        const crossTierWeights = crossTierCandidates.map((candidate) => candidate.weight);
+        const crossTierOpponentItem = weightedRandomSelect(crossTierCandidates, crossTierWeights);
+        if (crossTierOpponentItem) {
+          logMatch(
+            "CROSS-TIER",
+            seed.p,
+            crossTierOpponentItem.p,
+            seed.weight,
+            crossTierOpponentItem.weight,
+            "#E91E63"
+          );
+          const rank1 = getPerformerRankInList(seed.p, performers);
+          const rank2 = getPerformerRankInList(crossTierOpponentItem.p, performers);
+          return { items: [seed.p, crossTierOpponentItem.p], ranks: [rank1, rank2] };
+        }
       }
     }
     const validOpponents = eligiblePerformers.filter((item) => {
@@ -2981,7 +2996,7 @@ Match Stats:`;
       }
     }
     const looseRangeOpponents = eligiblePerformers.filter(
-      (item) => item.p.id !== seed.p.id && Math.abs(seed.rating - item.rating) <= 25 && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
+      (item) => item.p.id !== seed.p.id && Math.abs(seed.rating - item.rating) <= 25 && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id) && canBattleByTier(tier1, getRatingTier(item.p.rating100 || 1))
     );
     if (looseRangeOpponents.length > 0) {
       const looseWeights = looseRangeOpponents.map((opponent) => opponent.weight);
@@ -2994,7 +3009,7 @@ Match Stats:`;
       }
     }
     const fallbackOpponents = eligiblePerformers.filter(
-      (item) => item.p.id !== seed.p.id && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id)
+      (item) => item.p.id !== seed.p.id && !isPerformerOnCooldown(item.p.id) && !isPerformerRecentlySelected(item.p.id) && canBattleByTier(tier1, getRatingTier(item.p.rating100 || 1))
     );
     if (fallbackOpponents.length > 0) {
       const fallbackWeights = fallbackOpponents.map((opponent) => opponent.weight);
@@ -4568,7 +4583,6 @@ Match Stats:`;
         modal = document.createElement("div");
         modal.id = "hon-modal";
         modal.className = "hon-modal";
-        initEventLog();
         const { createSidebar: createSidebar2, attachSidebarEventListeners: attachSidebarEventListeners2 } = await Promise.resolve().then(() => (init_ui_sidebar(), ui_sidebar_exports));
         const { isMobile: isMobile2 } = await Promise.resolve().then(() => (init_ui_swipe(), ui_swipe_exports));
         const mobileCheck = isMobile2();
@@ -4680,6 +4694,7 @@ Match Stats:`;
       modal.style.left = "0";
       modal.style.width = "100%";
       modal.style.height = "100%";
+      initEventLog();
       const { loadNewPair: loadNewPair2 } = await Promise.resolve().then(() => (init_battle_engine(), battle_engine_exports));
       if (state.currentMode === "gauntlet") {
         if (state.gauntletChampion) {
