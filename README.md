@@ -79,7 +79,7 @@ Additional functionality has been added surrounding mobile support, quality of l
 
 ## Matchmaking
 
-Matchmaking has been completely reworked to adapt to the user in real time while maintaining match variety, integrity, and fairness. The logic behind this system uses math and real time variables and metrics to further calculate scoring, match selection, and frequency. This is a fairly complex topic that Ihave elaborated in the [Ascension White Paper](https://github.com/Servbot91/Ascension/blob/main/Documentation/White%20Paper.md).
+Matchmaking has been completely reworked to adapt to the user in real time while maintaining match variety, integrity, and fairness. The logic behind this system uses math and real time variables and metrics to further calculate scoring, match selection, and frequency. This is a fairly complex topic that I have elaborated on in the [Ascension White Paper](https://github.com/Servbot91/Ascension/blob/main/Documentation/White%20Paper.md).
 
 - ### Dynamic K-Factor
 
