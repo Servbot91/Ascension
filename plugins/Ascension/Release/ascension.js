@@ -2486,7 +2486,7 @@ Match Stats:`;
       if (!isVictoryVisible) {
         loadNewPair();
       }
-    }, 1500);
+    }, 1300);
   }
   var init_match_handler = __esm({
     "match-handler.js"() {
@@ -2511,47 +2511,71 @@ Match Stats:`;
     loadNewPair: () => loadNewPair
   });
   function attachBattleListeners(area) {
+    if (area._battleCleanup) {
+      area._battleCleanup();
+    }
+    const cleanupFunctions = [];
+    let carouselInstance = null;
     if (isMobile()) {
       const container = area.querySelector(".hon-vs-container");
       if (container) {
         const cards = Array.from(container.querySelectorAll(".hon-scene-card"));
         if (cards.length >= 2) {
           const carousel = enableCardCarousel(container, cards);
+          carouselInstance = carousel;
           let clickTimeout;
           cards.forEach((card, index) => {
-            card.querySelector(".hon-scene-body").addEventListener("click", (e) => {
-              if (clickTimeout)
-                return;
-              clickTimeout = setTimeout(() => {
+            const clickHandler = (e) => {
+              if (clickTimeout) {
                 clearTimeout(clickTimeout);
+              }
+              clickTimeout = setTimeout(() => {
                 clickTimeout = null;
               }, 500);
               e.stopPropagation();
               handleChooseItem(e);
-            });
+            };
+            const sceneBody = card.querySelector(".hon-scene-body");
+            if (sceneBody) {
+              sceneBody.addEventListener("click", clickHandler);
+              cleanupFunctions.push(() => sceneBody.removeEventListener("click", clickHandler));
+            }
           });
         }
       }
     } else {
-      area.querySelectorAll(".hon-scene-body").forEach((body) => {
-        body.onclick = (e) => handleChooseItem(e);
+      const sceneBodies = area.querySelectorAll(".hon-scene-body");
+      sceneBodies.forEach((body) => {
+        const clickHandler = (e) => handleChooseItem(e);
+        body.onclick = clickHandler;
+        cleanupFunctions.push(() => {
+          body.onclick = null;
+        });
       });
     }
     if (!isMobile()) {
-      area.querySelectorAll(".hon-scene-card").forEach((card) => {
+      const cards = area.querySelectorAll(".hon-scene-card");
+      cards.forEach((card) => {
         const video = card.querySelector(".hon-hover-preview");
         if (!video)
           return;
-        card.onmouseenter = () => video.play().catch(() => {
+        const mouseEnterHandler = () => video.play().catch(() => {
         });
-        card.onmouseleave = () => {
+        const mouseLeaveHandler = () => {
           video.pause();
           video.currentTime = 0;
         };
+        card.onmouseenter = mouseEnterHandler;
+        card.onmouseleave = mouseLeaveHandler;
+        cleanupFunctions.push(() => {
+          card.onmouseenter = null;
+          card.onmouseleave = null;
+        });
       });
     }
-    area.querySelectorAll(".hon-tags-more").forEach((tagElement) => {
-      tagElement.onclick = function(e) {
+    const tagElements = area.querySelectorAll(".hon-tags-more");
+    tagElements.forEach((tagElement) => {
+      const clickHandler = function(e) {
         e.stopPropagation();
         const container = this.parentElement;
         const displayedTags = container.querySelector(".hon-tags-displayed");
@@ -2566,7 +2590,19 @@ Match Stats:`;
         if (expandedTags)
           expandedTags.style.display = "inline";
       };
+      tagElement.onclick = clickHandler;
+      cleanupFunctions.push(() => {
+        tagElement.onclick = null;
+      });
     });
+    area._battleCleanup = () => {
+      if (carouselInstance && typeof carouselInstance.destroy === "function") {
+        carouselInstance.destroy();
+        carouselInstance = null;
+      }
+      cleanupFunctions.forEach((cleanup2) => cleanup2());
+      delete area._battleCleanup;
+    };
   }
   async function fetchPair() {
     const { battleType, currentMode } = state;
