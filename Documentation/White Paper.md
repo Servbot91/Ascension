@@ -181,4 +181,4 @@ $$Result = (K \text{ Factor}) \times (\text{Elo Probability}) \times (\text{Unde
 
 # Summary
 
-The aggregation of all these systems in tandem allows for a dynamic granular vertical scaling rating system unique to the user that evolves in real time. Users you can expect to see a healthy vertically scaled tier distribution of their database when starting from 0 or by using the Primer features in the stash task settings.
+The aggregation of all these systems in tandem allows for a dynamic granular vertical scaling rating system unique to the user that evolves in real time. Users can expect to see a healthy vertically scaled tier distribution of their database when starting from 0 or by using the Primer features in the stash task settings.
