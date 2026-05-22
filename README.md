@@ -204,6 +204,8 @@ If start with sub-primed DB, you could benefit skipping the F tier grind if you 
 
 You can use the Primer task to jumpstart your database if you do not want to start from 0.
 
+---
+
 ### How long will it take before my performers are all out of F tier?
 
 If you started from 0 it can take a quite a bit of time before your performers fill the other tiers on a reasonable bell curve. This is by design. A healthy tier system is going to filter more and more performers as they hit tier walls and bounce back to where they need to be. The scoring is meant to make your selections meaningful. Depending on your performer count, this could take a very long time. 
@@ -212,33 +214,49 @@ However, there are accelerators that can help your performers climb. For example
 
 Another option is to use the other modes. Placement mode and Champion mode with performers at least in C in D tier can help accelerate getting performers out of F tier. In Head to Head mode with the underdog bonus, performers can see points as high as 2.3.
 
+---
+
 ### Why S-Tier is hard to climb?
 
 This is by design. S-Tiers are meant to be S-Tiers and their matches are meant to reflect that. They cannot battle anyone below B tier and face a significant point reduction at their level. If an S tier is in fact an S-Tier this really shouldn't be an issue.
+
+---
 
 ### Why do I see unrated performers so much?
 
 Keep in mind when your database starts from 0 unrated performers take overwhelming priority to give everyone a fair baseline and match count. Over time once your habits of play and scheduling kick in and you've got a baseline.
 
+---
+
 ### Why am I not seeing performers that graduated ranks?
 
 If your performers have just graduated they probably have a low weight. It is important to remember higher weights will always trump lower weights as you play. Over time, their weights recharge towards 1.0. 
+
+---
 
 ### Why am I not seeing enough of X tier?
 
 It takes time for your tiers to fill out enough to where the matchmaking can satisfy the requirement (minimum 20 entities), you also have to consider whether weight is counting against the performers as well. The database will scale over time with your input. You will see more and more cross tier matches, more and more different tier matches, and more and more competitive matches.
 
+---
+
 ### How to I backup and restore my database?
 
 Use the snapshot task in your plugin tasks menu. It will create a json file in your Ascension plugin folder with a date. When running the import, it will look for the most recently created snapshot and import automatically.
+
+---
 
 ### How can I check the system is working correctly?
 
 The browser console menu features an extremely robust logging system for debug. Users can use this to further gauge if matchmaking is working as intended. Most logs are also forwarded to the battle log stream for review as well if you do not want to use the console menu.
 
+---
+
 ### How do I start over?
 
 Go to Settings -> Tasks -> Scroll down to the Ascension plugin tasks. From here you can wipe match history and ratings.
+
+---
 
 ### How can I support development?
 
