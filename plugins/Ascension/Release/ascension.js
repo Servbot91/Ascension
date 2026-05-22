@@ -1642,9 +1642,10 @@
       getCurrentCard,
       // Cleanup function to remove event listeners
       destroy: () => {
-        container.removeEventListener("touchstart", touchStartListener);
-        container.removeEventListener("touchmove", touchMoveListener);
-        container.removeEventListener("touchend", touchEndListener);
+        const options = { passive: false };
+        container.removeEventListener("touchstart", touchStartListener, options);
+        container.removeEventListener("touchmove", touchMoveListener, options);
+        container.removeEventListener("touchend", touchEndListener, options);
         if (leftHint && leftHint.parentNode) {
           leftHint.parentNode.removeChild(leftHint);
         }
@@ -4351,10 +4352,13 @@ Match Stats:`;
     setTimeout(() => clearInterval(checkInterval), 5e3);
   }
   function setupLayoutConstraints(pluginLayout, logContainer) {
-    const observer2 = new ResizeObserver(() => {
+    if (layoutObserver) {
+      layoutObserver.disconnect();
+    }
+    layoutObserver = new ResizeObserver(() => {
       constrainEventLogPosition(pluginLayout, logContainer);
     });
-    observer2.observe(pluginLayout);
+    layoutObserver.observe(pluginLayout);
     constrainEventLogPosition(pluginLayout, logContainer);
   }
   function constrainEventLogPosition(pluginLayout, logContainer) {
@@ -4541,8 +4545,17 @@ Match Stats:`;
       logContainer.remove();
     }
     eventLogEntries = [];
+    if (layoutObserver) {
+      layoutObserver.disconnect();
+      layoutObserver = null;
+    }
+    try {
+      localStorage.removeItem(EVENT_LOG_STORAGE_KEY);
+    } catch (e) {
+      console.warn("[Ascension] Failed to clear event log state:", e);
+    }
   }
-  var eventLogEntries, MAX_LOG_ENTRIES, originalConsoleLog, originalConsoleWarn, originalConsoleError, EVENT_LOG_STORAGE_KEY;
+  var eventLogEntries, MAX_LOG_ENTRIES, originalConsoleLog, originalConsoleWarn, originalConsoleError, layoutObserver, EVENT_LOG_STORAGE_KEY;
   var init_ui_event_log = __esm({
     "ui-event-log.js"() {
       eventLogEntries = [];
@@ -4550,6 +4563,7 @@ Match Stats:`;
       originalConsoleLog = console.log;
       originalConsoleWarn = console.warn;
       originalConsoleError = console.error;
+      layoutObserver = null;
       EVENT_LOG_STORAGE_KEY = "hon-event-log-state";
     }
   });
