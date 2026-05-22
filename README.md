@@ -1,3 +1,5 @@
+
+
 # Ascension
 
 Ascension is the Sakoto fork of the original plugin known as hot or not. It has been entirely reworked to serve as a comprehensive stash entity rating and tier system that scales and adapts to your database in real time. This fork sets out to further expand and develop core features of the original while maintaining a consistent, fair, and stable rating system. 
@@ -5,6 +7,44 @@ Ascension is the Sakoto fork of the original plugin known as hot or not. It has 
 Additional functionality has been added surrounding mobile support, quality of life, optimization, complex matchmaking, database integrity, new IU experience, and much more.
 
 ---
+
+## Table of Contents  
+  
+- [Features](#features)  
+- [Multiple Rating Modes](#multiple-rating-modes)  
+- [Head to Head](#head-to-head)  
+- [Placement Mode](#placement-mode)  
+- [Champion Mode](#champion-mode)  
+- [Matchmaking](#matchmaking)  
+- [Dynamic K-Factor](#dynamic-k-factor)  
+- [Weight System](#weight-system)  
+- [Match Distribution](#match-distribution)  
+- [Tier System](#tier-system)  
+- [Modifiers](#modifiers)  
+- [New UI](#new-ui)  
+- [New Leaderboard](#new-leaderboard)  
+- [Battle Cards](#battle-cards)  
+- [New Performer Ledger](#new-performer-ledger)  
+- [Battle Log](#battle-log)  
+- [Additional Animations & Misc](#additional-animations--misc)  
+- [New System Tasks](#new-system-tasks)  
+- [Prime Performer Ratings](#prime-performer-ratings)  
+- [Wipe Performer Match History](#wipe-performer-match-history)  
+- [Reset All Performer Ratings](#reset-all-performer-ratings)  
+- [Snapshot](#snapshot)  
+- [Import Ascension Snapshot](#import-ascension-snapshot)  
+  
+- [Frequently Asked Questions](#frequently-asked-questions)  
+- [Should I start over or keep my ratings?](#should-i-start-over-or-keep-my-ratings)  
+- [How long will it take before my performers are all out of F tier?](#how-long-will-it-take-before-my-performers-are-all-out-of-f-tier)  
+- [Why S-Tier is hard to climb?](#why-s-tier-is-hard-to-climb)  
+- [Why do I see unrated performers so much?](#why-do-i-see-unrated-performers-so-much)  
+- [Why am I not seeing performers that graduated ranks?](#why-am-i-not-seeing-performers-that-graduated-ranks)  
+- [Why am I not seeing enough of X tier?](#why-am-i-not-seeing-enough-of-x-tier)  
+- [How to I backup and restore my database?](#how-to-i-backup-and-restore-my-database)  
+- [How can I check the system is working correctly?](#how-can-i-check-the-system-is-working-correctly)  
+- [How do I start over?](#how-do-i-start-over)  
+- [How can I support development?](#how-can-i-support-development)
 # Features
 
 - ## Multiple Rating Modes
@@ -26,7 +66,7 @@ Additional functionality has been added surrounding mobile support, quality of l
 
 	- ### Placement Mode
 
-		Formally known as gauntlet mode. Placement mode allows a performer to battle up tiers to find their place in your DB. This can accelerate priming your database and giving performers a VIP pass out of low tier hell. When selecting this mode you are presented with the option of 6 different performers to choose from. Furthermore, launching a Ascension on a performer page will start the plugin in placement mode, switching to champion mode will maintain this login.
+		Placement mode allows a performer to battle up tiers to find their place in your DB. This can accelerate priming your database and giving performers a VIP pass out of low tier hell. When selecting this mode you are presented with the option of 6 different performers to choose from. Furthermore, launching a Ascension on a performer page will start the plugin in placement mode, switching to champion mode will maintain this login.
 
 	- ### Champion Mode
 
@@ -44,7 +84,7 @@ Matchmaking has been completely reworked to adapt to the user in real time while
 	
 - ### Weight System
 
-	 A weight system has been added to maintain fair match distribution that is calculated off the 'last match' hotornot_stats value. Weight distribution is on a scale of .10 to 1.01. A higher rating value is used for newcomers and the unrated. Once a performer has been rated they enter a blackout phase. The performer will exist in this state 15 minutes with a weight of 0.
+	 A weight system has been added to maintain fair match distribution that is calculated off the 'last match' time stamp. Weight distribution is on a scale of .10 to 6.00. A higher rating value is used for newcomers and the unrated. Once a performer has been rated they enter a blackout phase. The performer will exist in this state 15 minutes with a weight of 0.
 	 
 	 During this time the performer cannot be selected by the matchmaking system. Once the blackout has expired their weight begins to recharge over a 12 hour period. This process continues until either every performer is blacked out, or 90% of the database has a low weight in which case the system resets every performers weight back to 1.
 
@@ -60,13 +100,30 @@ Matchmaking has been completely reworked to adapt to the user in real time while
 
 	In tiers such as S and A, users can expect a 40% reduction in scoring for S Tier performers and a 20% reduction in A-Tier performers. This stacks with the Dynamic K-Factor. 
 
+- ### Modifiers
+
+	Modifiers add to the complexity of the system further boosting or nerfing performers in real with proper context taken into account.
+	
+	- **Penalty Modifiers**
+		- 0.6x 1st appearance
+		- 0.3x 2nd Appearance 
+		- 0.1x 3rd Appearance
+		- 0.7x Top 10% match count
+		- Complete exclusion (Blackout) for recently selected; 30 mins
+		
+	 - **Booster Modifiers**
+		- Recency(Full Charge): Max 1.0
+		- Low Match Boost: Max 2.0
+		- Tier Boost: Max 2.0 (Only during tier focused matches)
+		- Distribution Boost: Max 1.5 (Bottom 10%)
+
 ## New UI
 
 The UI has been reimagined and is better streamlined on mobile for the on the go user. Changes have been made on how information is displayed and consumed
 
 - ### New Leaderboard
 
-	The leaderboard is now interactive and integrated with the tier system. Users can visualize their and sort fields by selecting options. The bar graph display is not animated and better helps you visualize your tier distribution
+	The leaderboard is now interactive and integrated with the tier system. Users can now better visualize their entities and sort accordingly.
 
 - ### Battle Cards
 
@@ -86,6 +143,25 @@ The UI has been reimagined and is better streamlined on mobile for the on the go
 - ### New Performer Ledger
 
 	The performer ledger (and scoring) now reflects score updates with a decimal value ie 55 = 5.5. Tier changes. Other improvements have been made to further to cleanup minor visual bugs that could occur when using the ledger.
+
+- ### Battle Log
+
+	A Battle Log has been added to the UI so you can further see what is happening with the plugin mechanically rather than opening the console menu. This gives users more information to assist with debug and overall understanding on how selection\scoring is done.
+	
+	The battle log features a direct stream of the console logs to the UI here's what you can expect to see:
+	
+	- Seed selection
+	- Performer weight
+	- Selected Seeds total match count
+	- Performer ID
+	- Selected Challenger
+	- Win\Loss result and scoring per said result
+	- Skip logging
+	- Undo Match logging
+	- Tier Selection logging
+	- Error reporting
+	
+	The logs are color coded to make information easily glanceable. A trash can (clear)button, hide logs, and close battle log button also exists within the container. On Mobile, the battle log displays under all other containers keeping it out of the users way and only available should the user need the information.**
 
 - ### Additional Animations & Misc
 
@@ -160,3 +236,11 @@ Use the snapshot task in your plugin tasks menu. It will create a json file in y
 ### How can I check the system is working correctly?
 
 The browser console menu features an extremely robust logging system for debug. Users can use this to further gauge if matchmaking is working as intended.
+
+### How do I start over?
+
+Go to settings -> Tasks -> Scroll down to the Ascension plugin tasks. From here you can wipe match history and ratings.
+
+### How can I support development?
+
+Number 1 I will NEVER and certainly have NO PLANS to paywall any of my work or contributions to the plugins I have touched nor will I ever. However, I spend a significant amount of my time trying to perfect these different plugins for you guys while I try to survive in the world. Selflessly. I have a [buy me a coffee](https://buymeacoffee.com/sakotobot?status=1) link where you can send me a few pennies for my time if you'd like to help. Its certainly not a requirement, but it does help.. alot.
