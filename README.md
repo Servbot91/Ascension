@@ -45,6 +45,9 @@ Additional functionality has been added surrounding mobile support, quality of l
   - [How can I check the system is working correctly?](#how-can-i-check-the-system-is-working-correctly)  
   - [How do I start over?](#how-do-i-start-over)  
   - [How can I support development?](#how-can-i-support-development)
+
+---
+
 # Features
 
 - ## Multiple Rating Modes
@@ -71,6 +74,8 @@ Additional functionality has been added surrounding mobile support, quality of l
 	- ### Champion Mode
 
 		 A mode where winner stays on. If a performer loses their match up, they are knocked out and the  next performer takes over. As mentioned in placement mode, you are presented with an option of 6 different performers. If Ascension is launched on a performer page, you can switch to champion mode and it will start champion mode with the performer selected.
+
+---
 
 ## Matchmaking
 
@@ -116,6 +121,8 @@ Matchmaking has been completely reworked to adapt to the user in real time while
 		- Low Match Boost: Max 2.0
 		- Tier Boost: Max 2.0 (Only during tier focused matches)
 		- Distribution Boost: Max 1.5 (Bottom 10%)
+
+---
 
 ## New UI
 
@@ -166,6 +173,8 @@ The UI has been reimagined and is better streamlined on mobile for the on the go
 
 	Lots of visual animations have been prodded to the cards on mobile and desktop to give the app a more put together look. Users can expect to see Tier change notifications, and other improved UI elements on mobile and desktop
 
+---
+
 ## New System Tasks
 
 New tasks have been added for users to protect databases. Users can now prime, snapshot, reset, and restore their databases at the click of a button. This allows users to test beta builds or even the production build with no long term impact on their stash database and without having to backup the stash database as a whole.
@@ -184,6 +193,8 @@ New tasks have been added for users to protect databases. Users can now prime, s
 	
 - ### Import Ascension Snapshot
 	Looks for for most recent snapshot and restores database.
+
+---
 
 # Frequently Asked Questions
 
