@@ -21,7 +21,7 @@ A Tier System was introduced to better visualize entities in the user stash data
 
 ## Tier Focus
 
-Tier Focus was introduced to force battles within their respective tier. The system uses a random array and chooses from the following selection: S-Tier, A-Tier, B-Tier, C-Tier, D-Tier, F-Tier, Any, Newcomers. For a Tier to become focus, it must meet the following requirements:
+Tier Focus was introduced to force battles within their respective tier. The system uses a random array and chooses from the following selection: S-Tier, A-Tier, B-Tier, C-Tier, D-Tier, F-Tier, Any, Newcomers. For a Tier to become focused, it must meet the following requirements:
 
  - S, A, B, C, D, F
     - Avg Pool Weight must be above .80
@@ -33,9 +33,13 @@ Tier Focus was introduced to force battles within their respective tier. The sys
  - Any
     - No requirements are used for the Any selection, and the logic is the same as regular matchmaking.
   
-When evaluting selection for a tier focus, a calculation is made verifying requirements for tier selection. If a selection fails, the battle log will update with its reason and a new check is made. The calculation will continue until it finds a valid selection and will safely fallback to the Any selection should no tier qualify. When a tier is selected, all performers within that tier have their weights boosted for focused selection. This means if you have had performers within a tier rated in the Any selection and their weights have been dropped to a low value, they will get another oppurtunity for a match if the tier is selected for focus. The Any selection does not boost weights. While the system will still use the weight and recency calculations to prioritize entities, depending on your tier size you can still see entities who may have been shown more recently in your session. This system further boosts database priming speed while promoting healthy match-ups. With the catch up mechanics like getLowMatchBoost and fair handling of tier selection match count distribution remains within an acceptable level of drift.
+When evaluting selection for a tier focus, a calculation is made verifying requirements for tier selection. If a selection fails, the battle log will update with its reason and a new check is made. The calculation will continue until it finds a valid selection and will safely fallback to the Any selection should no tier qualify. 
 
-To maintain focus selection balance the system will lock on a tier for a semi-random block of matches ($3$ to $7$ matches long) before rolling a weighted probability to select a new tier from your shuffled rotation list. This ensures a healthy rotation. If all pools have been exhausted, it will rely on the Any selection logic until a new pool qualifies for selection. The logic continuously checks tiers as users engage to determine eligibility.
+When a tier is selected, all performers within that tier have their weights boosted (2.0) for focused selection. This means if you have had performers within a tier rated in the Any selection and their weights have been dropped to a low value, they will get another oppurtunity for a match if the tier is selected for focus. The Any selection does not boost weights. While the system will still use the weight and recency calculations to prioritize entities, depending on your tier size you can still see entities who may have been shown more recently in your session. 
+
+To maintain focus selection balance the system will lock on a tier for a semi-random block of matches ($3$ to $7$ matches long) before rolling a weighted probability check to select a new tier from the shuffled rotation list. If all pools have been exhausted, it will rely on the Any selection logic until a new pool qualifies for selection. The logic continuously evaluates tiers as users engage and entities recharge to determine eligibility.
+
+This system further boosts database priming speed while promoting healthy match-ups. With the catch up mechanics like getLowMatchBoost and fair handling of tier selection match count distribution remains within an acceptable level of drift.
 
 ---
 
