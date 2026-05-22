@@ -20,7 +20,7 @@ A Tier System was introduced to better visualize entities in the user stash data
 | **F-Tier** | **0 – 24.9**     | **Underperformer** | New or Performers struggling to maintain a 25+ rating. |
 # Match Selection
 
-Performers are filtered before a pairing is made which considers the Recency Weighting and Low Match Boost values. Combined these systems contribute to an overall 'weight' of a performer which governs their selection. The first performer is randomly selected as a 'Seed' from a pool of 15 seeds. After a performer is selected and rated in a match, their weight is set to 0 for 15 minutes making them ineligible for automated match making selection. 
+Performers are filtered before a pairing is made which considers the Recency Weighting and Low Match Boost values. Combined these systems contribute to an overall 'weight' of a performer which governs their selection. The first performer is randomly selected via weightedRandomSelect as a 'Seed' from a pool of 15 seeds. After a performer is selected and rated in a match, their weight is set to 0 for 30 minutes making them ineligible for automated match making selection. 
 
 Once this period has expired, their weight begins to recharge towards 1.0. If all performer weights are near exhaustion (90%) or there is no performers available to satisfy selection due to weight, all performer weights are reset to 1.0.
 
@@ -47,7 +47,7 @@ The Low Match Boost function considers a performers match count and prioritizes 
 |**Moderately Under-sampled**|$avgMatches > 10$ AND $matches < 50\%$ of Average|**1.2x**|**Steady Growth**: A gentle nudge for performers who are active but still below the median data density.|
 |**Well-Established**|All other cases|**1.0x**|**Normal Selection**: No artificial boost; selection relies purely on recency and performance.|
 
-To maintain reasonable pairing the selection logic only sees up to 10 matches. This is a lever used to prevent performers from trying to catch up to long established databases. IE if the avg match count is 200 and a new performer enters the pool, they would always have a boosted weight selection trying to catch up thus polluting selection logic. By limiting the match cap to 10, this is avoided.  Once a performer has hit a match count of 10 they are considered integrated and normal weighting logic is followed.
+To maintain reasonable pairing the selection logic uses a match cap of 10 compared to the pool average to determine boost. 
 
 | **Match Count Type** | **Variable Name** | **Actual Value** | **Value Seen by Weighting Engine** |
 | -------------------- | ----------------- | ---------------- | ---------------------------------- |
@@ -64,11 +64,11 @@ To maintain reasonable pairing the selection logic only sees up to 10 matches. T
 
 ### Comparator Selection Window
 
-When selecting a performer, the matchmaking does not select the first available. Instead it chooses randomly from the top 15 weighted performers to maintain variety. The selected performer becomes the seed. The seed's rating determines its anchor pairing eligibility.
+When selecting a performer, the matchmaking does not select the first available. Instead it chooses via weightedRandomSelect from the top 15 weighted performers to maintain variety. The selected performer becomes the seed. The seed's rating determines its anchor pairing eligibility.
 
 #### Anchor Eligibility Selectors
 
-The anchor must be within 15 points of the seed above or below. For S Tier performers, they are restricted from battling anyone below B tier to maintain match integrity. This is also considered in the cross tier match event pairing.
+The anchor must be within 15 points of the seed above or below while respecting recency. For S Tier performers, they are restricted from battling anyone below B tier to maintain match integrity. This is also considered in the cross tier match event pairing.
 
 ### Match Selection Events
 
@@ -80,7 +80,7 @@ The match selection features a 10% chance of a Cross tier matchup with the selec
 
 ### Additional Fallbacks
 
-The system will always maintain checks to satisfy the 2 minimum performer requirement. However  criteria fails to be met, the system will drop the smart selection and search the nearest opponent. This is to maintain match continuity in the event of failover. If it cannot find the next closest opponent, it will randomly select. 
+The system will always maintain checks to satisfy the 2 minimum performer requirement. However if criteria fails to be met, the system will drop the smart selection and search the nearest opponent. This is to maintain match continuity in the event of failover. If it cannot find the next closest opponent, it will randomly select. 
 
 ---
 
@@ -122,7 +122,7 @@ Additionally the K-Factor adjusts according to game mode being used.
 
 ### Protection and Underdog Multipliers
 
-Rating difference affects point distribution and there are also protections for matchups with significant gaps. This is to prevent punishments for the expected loser or winner and to cap unexpected wins and losses to maintain a fair scoring system.  The outcome is decided by the sum of the following variables:
+Rating difference affects point distribution and there are also protections for matchups with significant gaps. This is to prevent punishments for the expected loser or winner and to cap unexpected wins and losses to maintain a fair scoring system. The outcome is decided by the sum of the following variables:
 $$Result = (K \text{ Factor}) \times (\text{Elo Probability}) \times (\text{Underdog Multiplier}) \times (\text{Protection/Dampening})$$
 
 #### Rating Difference Scoring
