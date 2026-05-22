@@ -37,6 +37,7 @@ When evaluting selection for a tier focus, a calculation is made verifying requi
 
 To maintain focus selection balance the system will lock on a tier for a semi-random block of matches ($3$ to $7$ matches long) before rolling a weighted probability to select a new tier from your shuffled rotation list. This ensures a healthy rotation. If all pools have been exhausted, it will rely on the Any selection logic until a new pool qualifies for selection. The logic continuously checks tiers as users engage to determine eligibility.
 
+---
 
 # Match Selection
 
@@ -168,7 +169,7 @@ $$Result = (K \text{ Factor}) \times (\text{Elo Probability}) \times (\text{Unde
 
 | **Mode**     | **Trigger Condition** | **Multiplier**                   | **Strategic Effect**                                                 |
 | ------------ | --------------------- | -------------------------------- | -------------------------------------------------------------------- |
-| **Gauntlet** | Streak $\ge 3$        | **Variable (0.9x down to 0.3x)** | Wins become 15% less effective for every win past the 3rd.           |
+| **Placement** | Streak $\ge 3$        | **Variable (0.9x down to 0.3x)** | Wins become 15% less effective for every win past the 3rd.           |
 | **Champion** | Streak $5–9$          | **0.7x**                         | Significant reduction in gains to keep the "King" within reach.      |
 | **Champion** | Streak $\ge 10$       | **0.4x**                         | **Hard Cap**: Extreme dampening to stop runaway leaderboard leaders. |
 
@@ -176,4 +177,4 @@ $$Result = (K \text{ Factor}) \times (\text{Elo Probability}) \times (\text{Unde
 
 # Summary
 
-The aggregation of all these systems in tandem allows for a dynamic granular vertical scaling rating system unique to the user that evolves in real time. Over time, users you can expect to see a healthy vertically scaled tier distribution of their database when starting from 0 or by using the Primer features in the stash task settings.
+The aggregation of all these systems in tandem allows for a dynamic granular vertical scaling rating system unique to the user that evolves in real time. Users you can expect to see a healthy vertically scaled tier distribution of their database when starting from 0 or by using the Primer features in the stash task settings.
