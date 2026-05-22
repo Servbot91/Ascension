@@ -3315,7 +3315,13 @@ Match Stats:`;
     </div>
   `;
     document.body.appendChild(statsModal);
-    const closeStats = () => statsModal.remove();
+    const closeStats = () => {
+      if (weightCountdownInterval) {
+        clearInterval(weightCountdownInterval);
+        weightCountdownInterval = null;
+      }
+      statsModal.remove();
+    };
     const dialogContainer = statsModal.querySelector(".hon-stats-modal-dialog");
     dialogContainer.addEventListener("click", (e) => e.stopPropagation());
     statsModal.querySelector(".hon-modal-backdrop").addEventListener("click", closeStats);
@@ -3622,7 +3628,10 @@ Match Stats:`;
     });
   }
   function initWeightCountdowns() {
-    setInterval(() => {
+    if (weightCountdownInterval) {
+      clearInterval(weightCountdownInterval);
+    }
+    weightCountdownInterval = setInterval(() => {
       const countdownElements = document.querySelectorAll(".countdown");
       countdownElements.forEach((element) => {
         const lastMatchStr = element.dataset.lastMatch;
@@ -3757,7 +3766,7 @@ Match Stats:`;
       }, index * 100);
     });
   }
-  var COUNTRY_FLAGS, CACHE_TTL2, cachedPerformers, cachedModalContent, cacheTimestamp;
+  var COUNTRY_FLAGS, CACHE_TTL2, cachedPerformers, cachedModalContent, cacheTimestamp, weightCountdownInterval;
   var init_ui_stats = __esm({
     "ui-stats.js"() {
       init_api_client();
@@ -4020,6 +4029,7 @@ Match Stats:`;
       cachedPerformers = null;
       cachedModalContent = null;
       cacheTimestamp = 0;
+      weightCountdownInterval = null;
     }
   });
 
