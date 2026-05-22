@@ -74,7 +74,7 @@ Additional functionality has been added surrounding mobile support, quality of l
 
 ## Matchmaking
 
-Matchmaking has been completely reworked to adapt to the user in real time while maintaining match variety, integrity, and fairness. The logic behind this system uses math and real time variables and metrics to further calculate scoring, match selection, frequency, and fairness. This is a fairly complex topic that I will not elaborate too much on here, but for users who would like to know the deeper mechanics behind the brief explanations below I encourage you to read the Ascension White Paper.
+Matchmaking has been completely reworked to adapt to the user in real time while maintaining match variety, integrity, and fairness. The logic behind this system uses math and real time variables and metrics to further calculate scoring, match selection, and frequency. This is a fairly complex topic that Ihave elaborated in the [Ascension White Paper](https://github.com/Servbot91/Ascension/blob/main/Documentation/White%20Paper.md).
 
 - ### Dynamic K-Factor
 
@@ -84,19 +84,19 @@ Matchmaking has been completely reworked to adapt to the user in real time while
 	
 - ### Weight System
 
-	 A weight system has been added to maintain fair match distribution that is calculated off the 'last match' time stamp. Weight distribution is on a scale of .10 to 6.00. A higher rating value is used for newcomers and the unrated. Once a performer has been rated they enter a blackout phase. The performer will exist in this state 15 minutes with a weight of 0.
+	 A weight system has been added to maintain fair match distribution that is calculated off the 'last match' time stamp. Weight distribution is on a scale of .10 to 6.00. A higher rating value is used for newcomers and the unrated. Once a performer has been rated they enter a blackout phase. The performer will exist in this state 30 minutes with a weight of 0.
 	 
 	 During this time the performer cannot be selected by the matchmaking system. Once the blackout has expired their weight begins to recharge over a 12 hour period. This process continues until either every performer is blacked out, or 90% of the database has a low weight in which case the system resets every performers weight back to 1.
 
 - ### Match Distribution 
 
-	New and unrated performers get significant weight distribution while respecting recency until they hit 10 matches. By 10 matches, a performer is considered integrated and they will no longer get boosted weights.  This is to maintain a fair match distribution and to account for scaling for already established databases. 
+	New and unrated performers get significant weight bonus while respecting recency until they hit 10 matches. By 10 matches, a performer is considered integrated and they will no longer get boosted weights.  This is to maintain a fair match distribution and to account for scaling for already established databases. 
 	
 	The system will try to catch up an entity as well if their match count has significantly fallen behind the rest of the database (20%) and will boost their weight further protecting match distribution. Once that entity is caught up, normal weight rules are followed.
 	
 - ### Tier System
 
-	A Tier system was added to not only better visualize your performers, but to classify where they stand on the grand scale of your database. Performers can battle across tiers to maintain their status and can expect many challenges climbing and maintaining. With the Dynamic K-Factor performers can not only see a reduction in point scoring due to match count but also due to tier. This is to prevent performers climbing to tiers they dont belong in, and keeping tiers exclusive.
+	A Tier system was added to not only better visualize your entities, but to classify where they stand on the grand scale of your database. Entities can battle across tiers to maintain their status and can expect many challenges climbing and maintaining. With the Dynamic K-Factor Entities can not only see a reduction in point scoring due to match count but also due to their tier. This is to prevent Entities climbing to tiers they dont belong in and keeping tiers exclusive.
 
 	In tiers such as S and A, users can expect a 40% reduction in scoring for S Tier performers and a 20% reduction in A-Tier performers. This stacks with the Dynamic K-Factor. 
 
@@ -119,7 +119,7 @@ Matchmaking has been completely reworked to adapt to the user in real time while
 
 ## New UI
 
-The UI has been reimagined and is better streamlined on mobile for the on the go user. Changes have been made on how information is displayed and consumed
+The UI has been reimagined and is better streamlined on mobile for the on the go user. Changes have been made on how information is displayed and consumed.
 
 - ### New Leaderboard
 
@@ -130,7 +130,6 @@ The UI has been reimagined and is better streamlined on mobile for the on the go
 	The battle cards have been reworked to display more stashDB related information to give you a better assessment of the rating. Some stats have been omitted to prevent bias however users can expect to see the following:
 	- Now displays sex next to name (emoji) | Scene Count, Gallery Count, Image Count. 
 	- Tier
-	- Battle Rank Badge
 	- Country
 	- Height in ft and cm
 	- Measurements
@@ -161,7 +160,7 @@ The UI has been reimagined and is better streamlined on mobile for the on the go
 	- Tier Selection logging
 	- Error reporting
 	
-	The logs are color coded to make information easily glanceable. A trash can (clear)button, hide logs, and close battle log button also exists within the container. On Mobile, the battle log displays under all other containers keeping it out of the users way and only available should the user need the information.**
+	The logs are color coded to make information easily glanceable. A trash can (clear) button, hide logs, and close battle log button also exists within the container. On Mobile, the battle log displays under all other containers keeping it out of the users way and only available should the user need the information.**
 
 - ### Additional Animations & Misc
 
@@ -209,9 +208,9 @@ You can use the Primer task to jumpstart your database if you do not want to sta
 
 If you started from 0 it can take a quite a bit of time before your performers fill the other tiers on a reasonable bell curve. This is by design. A healthy tier system is going to filter more and more performers as they hit tier walls and bounce back to where they need to be. The scoring is meant to make your selections meaningful. Depending on your performer count, this could take a very long time. 
 
-However, there are accelerators that can help your performers climb. For example the cross tier match up will pair performers minimum 20+ points higher at a 10% chance. If they win, in most cases they can skip a tier. This begins to domino and grow exponentially as more and more performers pass the 1.7 rating wall. You will start to see your database accelerate as your S and A tiers break out. 
+However, there are accelerators that can help your performers climb. For example the cross tier match up will pair performers minimum 20+ points higher at a 10% chance. If they win, in most cases they can skip a tier. Tier Focus events further give performers meaningful matches allowing them to score higher vs lower tier performers due to closer point matching. This begins to domino and grow exponentially as more and more performers pass the 1.7 rating wall. You will start to see your database accelerate as your S and A tiers break out. 
 
-Another option is to use the other modes. Placement mode and Champion mode with performers at least in C in D tier can help accelerate getting performers out of F tier. In Head to Head mode with the underdog bonus, performers can see points as high as 2.8.
+Another option is to use the other modes. Placement mode and Champion mode with performers at least in C in D tier can help accelerate getting performers out of F tier. In Head to Head mode with the underdog bonus, performers can see points as high as 2.3.
 
 ### Why S-Tier is hard to climb?
 
@@ -219,7 +218,7 @@ This is by design. S-Tiers are meant to be S-Tiers and their matches are meant t
 
 ### Why do I see unrated performers so much?
 
-Keep in mind when your database starts from 0 unrated performers take overwhelming priority to give everyone a fair baseline and match count. Over time once your habits of play and scheduling kick in and you've got a baseline. Things will start shaking up.
+Keep in mind when your database starts from 0 unrated performers take overwhelming priority to give everyone a fair baseline and match count. Over time once your habits of play and scheduling kick in and you've got a baseline.
 
 ### Why am I not seeing performers that graduated ranks?
 
@@ -227,7 +226,7 @@ If your performers have just graduated they probably have a low weight. It is im
 
 ### Why am I not seeing enough of X tier?
 
-It takes time for your tiers to fill out enough to where the matchmaking can satisfy the requirement, you also have to consider whether weight is counting against the performers well. The database will scale over time with your input. You will see more and more cross tier matches, more and more different tier matches, and more and more competitive matches.
+It takes time for your tiers to fill out enough to where the matchmaking can satisfy the requirement (minimum 20 entities), you also have to consider whether weight is counting against the performers as well. The database will scale over time with your input. You will see more and more cross tier matches, more and more different tier matches, and more and more competitive matches.
 
 ### How to I backup and restore my database?
 
@@ -235,11 +234,11 @@ Use the snapshot task in your plugin tasks menu. It will create a json file in y
 
 ### How can I check the system is working correctly?
 
-The browser console menu features an extremely robust logging system for debug. Users can use this to further gauge if matchmaking is working as intended.
+The browser console menu features an extremely robust logging system for debug. Users can use this to further gauge if matchmaking is working as intended. Most logs are also forwarded to the battle log stream for review as well if you do not want to use the console menu.
 
 ### How do I start over?
 
-Go to settings -> Tasks -> Scroll down to the Ascension plugin tasks. From here you can wipe match history and ratings.
+Go to Settings -> Tasks -> Scroll down to the Ascension plugin tasks. From here you can wipe match history and ratings.
 
 ### How can I support development?
 
